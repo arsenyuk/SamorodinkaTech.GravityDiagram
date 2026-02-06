@@ -1,0 +1,76 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:local="clr-namespace:SamorodinkaTech.GravityDiagram.Demo"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+    x:Class="SamorodinkaTech.GravityDiagram.Demo.MainWindow"
+        Title="GravityDiagram.Demo">
+    <Grid ColumnDefinitions="320,*" RowDefinitions="*">
+        <ThemeVariantScope Grid.Column="0" RequestedThemeVariant="Light">
+            <Border Background="#F7F7F9"
+                    BorderBrush="#E2E2E8"
+                    BorderThickness="0,0,1,0"
+                    TextElement.Foreground="#111">
+                <ScrollViewer>
+                    <StackPanel Margin="12" Spacing="10">
+                    <TextBlock Text="Параметры раскладки" FontSize="16" FontWeight="SemiBold" />
+                    <TextBlock Text="(меняются на лету)" Foreground="Gray" FontSize="12" />
+
+                    <Separator />
+
+                    <TextBlock Text="Взаимное притяжение (BackgroundPairGravity)" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider x:Name="GravitySlider" Minimum="0" Maximum="0.5" Width="220" />
+                        <TextBlock x:Name="GravityValue" Width="70" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <TextBlock Text="Жёсткость дуг (EdgeSpringK)" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider x:Name="SpringKSlider" Minimum="0" Maximum="12" Width="220" />
+                        <TextBlock x:Name="SpringKValue" Width="70" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <TextBlock Text="Длина дуги (EdgeSpringRestLength)" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider x:Name="RestLenSlider" Minimum="0" Maximum="500" Width="220" />
+                        <TextBlock x:Name="RestLenValue" Width="70" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <TextBlock Text="Отталкивание перекрытий (OverlapRepulsionK)" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider x:Name="RepulsionSlider" Minimum="0" Maximum="200" Width="220" />
+                        <TextBlock x:Name="RepulsionValue" Width="70" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <TextBlock Text="Boost перекрытий в soft-режиме (SoftOverlapBoostWhenHardDisabled)" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider x:Name="SoftOverlapBoostSlider" Minimum="0" Maximum="12" Width="220" />
+                        <TextBlock x:Name="SoftOverlapBoostValue" Width="70" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <TextBlock Text="Минимальная дистанция (MinNodeSpacing)" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider x:Name="MinSpacingSlider" Minimum="0" Maximum="120" Width="220" />
+                        <TextBlock x:Name="MinSpacingValue" Width="70" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <CheckBox x:Name="MinimizeArcCheck" Content="Дуги минимизируют длину (физика)" />
+                    <CheckBox x:Name="HardSpacingCheck" Content="Жёстко соблюдать MinNodeSpacing" />
+
+                    <TextBlock Text="Итерации жёсткого разведения" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider x:Name="HardIterSlider" Minimum="0" Maximum="20" Width="220" />
+                        <TextBlock x:Name="HardIterValue" Width="70" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <Button x:Name="StabilizeButton" Content="Стабилизировать" />
+                    <TextBlock Text="Подсказка: если всё дрожит — нажми “Стабилизировать”." Foreground="Gray" FontSize="12" />
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </ThemeVariantScope>
+
+        <local:DiagramView Grid.Column="1" x:Name="DiagramView" />
+    </Grid>
+</Window>

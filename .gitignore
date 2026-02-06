@@ -1,0 +1,36 @@
+# .NET / Visual Studio / Rider
+**/bin/
+**/obj/
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# Build / publish artifacts
+*.dll
+*.pdb
+*.exe
+*.app
+*.deps.json
+*.runtimeconfig.json
+
+# NuGet
+**/packages/
+**/*.nupkg
+**/*.snupkg
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+
+# Avalonia / tooling caches
+**/.avalonia/
+**/.vscode/
+
+# Test results
+TestResults/
