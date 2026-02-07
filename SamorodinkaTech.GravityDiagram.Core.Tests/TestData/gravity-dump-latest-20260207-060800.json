@@ -1,0 +1,218 @@
+{
+  "schemaVersion": 4,
+  "createdAtUtc": "2026-02-07T06:08:00.830797+00:00",
+  "dt": 0.016666668,
+  "isMovingNow": false,
+  "willMoveNextStep": false,
+  "maxSpeed": 0,
+  "maxPredictedDelta": 0,
+  "maxPredictedDeltaIfNoForces": 0,
+  "settings": {
+    "nodeMass": 64.99332,
+    "softening": 50,
+    "backgroundPairGravity": 0.11509766,
+    "edgeSpringRestLength": 401.26953,
+    "connectedArcAttractionK": 10.638047,
+    "minimizeArcLength": true,
+    "minNodeSpacing": 55.441406,
+    "useHardMinSpacing": false,
+    "hardMinSpacingIterations": 9,
+    "hardMinSpacingSlop": 0.5,
+    "overlapRepulsionK": 200,
+    "softOverlapBoostWhenHardDisabled": 3.6114843,
+    "drag": 2.4,
+    "maxSpeed": 2400
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "bac6c11fe43945a5bdb301507c0f79f6",
+        "text": "1",
+        "position": {
+          "x": 209.08861,
+          "y": 299.18207
+        },
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "width": 170,
+        "height": 80,
+        "mass": 64.99332,
+        "bounds": {
+          "x": 124.08861,
+          "y": 259.18207,
+          "width": 170,
+          "height": 80
+        }
+      },
+      {
+        "id": "efd3633a78d8467d824daa4a12df5664",
+        "text": "2",
+        "position": {
+          "x": 339.54663,
+          "y": 434.3413
+        },
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "width": 170,
+        "height": 80,
+        "mass": 64.99332,
+        "bounds": {
+          "x": 254.54663,
+          "y": 394.3413,
+          "width": 170,
+          "height": 80
+        }
+      }
+    ],
+    "ports": [
+      {
+        "id": "272c1599a9c74940a93329bdb4cea10b",
+        "text": "out",
+        "nodeId": "bac6c11fe43945a5bdb301507c0f79f6",
+        "side": "Right",
+        "offset": 0.5,
+        "clampedOffset": 0.5,
+        "worldPosition": {
+          "x": 294.08862,
+          "y": 299.18207
+        }
+      },
+      {
+        "id": "c436987e4b8041e7927fc3e517dca8e8",
+        "text": "in",
+        "nodeId": "efd3633a78d8467d824daa4a12df5664",
+        "side": "Left",
+        "offset": 0.5,
+        "clampedOffset": 0.5,
+        "worldPosition": {
+          "x": 254.54663,
+          "y": 434.3413
+        }
+      }
+    ],
+    "arcs": [
+      {
+        "id": "75a4eec1ae8244b286658fd734519e89",
+        "text": "1\u21922",
+        "fromPortId": "272c1599a9c74940a93329bdb4cea10b",
+        "toPortId": "c436987e4b8041e7927fc3e517dca8e8"
+      }
+    ]
+  },
+  "forces": [
+    {
+      "nodeId": "bac6c11fe43945a5bdb301507c0f79f6",
+      "forceBackgroundGravity": {
+        "x": 0.008634868,
+        "y": 0.008946036
+      },
+      "forceOverlapRepulsion": {
+        "x": 0,
+        "y": -261.31467
+      },
+      "forceConnectedArcAttraction": {
+        "x": 0,
+        "y": 862.6983
+      },
+      "forceTotal": {
+        "x": 0.008634868,
+        "y": 601.3926
+      },
+      "predictedPositionIfNoForces": {
+        "x": 209.08861,
+        "y": 299.18207
+      },
+      "predictedVelocityIfNoForces": {
+        "x": 0,
+        "y": 0
+      },
+      "deltaPositionIfNoForces": {
+        "x": 0,
+        "y": 0
+      },
+      "predictedPositionBeforeConstraints": {
+        "x": 209.08861,
+        "y": 299.18454
+      },
+      "predictedPosition": {
+        "x": 209.08861,
+        "y": 299.18454
+      },
+      "deltaPositionBeforeConstraints": {
+        "x": 0,
+        "y": 0.0024719238
+      },
+      "deltaPosition": {
+        "x": 0,
+        "y": 0.0024719238
+      }
+    },
+    {
+      "nodeId": "efd3633a78d8467d824daa4a12df5664",
+      "forceBackgroundGravity": {
+        "x": -0.008634868,
+        "y": -0.008946036
+      },
+      "forceOverlapRepulsion": {
+        "x": 0,
+        "y": 261.31467
+      },
+      "forceConnectedArcAttraction": {
+        "x": 0,
+        "y": -862.6983
+      },
+      "forceTotal": {
+        "x": -0.008634868,
+        "y": -601.3926
+      },
+      "predictedPositionIfNoForces": {
+        "x": 339.54663,
+        "y": 434.3413
+      },
+      "predictedVelocityIfNoForces": {
+        "x": 0,
+        "y": 0
+      },
+      "deltaPositionIfNoForces": {
+        "x": 0,
+        "y": 0
+      },
+      "predictedPositionBeforeConstraints": {
+        "x": 339.54663,
+        "y": 434.33884
+      },
+      "predictedPosition": {
+        "x": 339.54663,
+        "y": 434.33884
+      },
+      "deltaPositionBeforeConstraints": {
+        "x": 0,
+        "y": -0.0024719238
+      },
+      "deltaPosition": {
+        "x": 0,
+        "y": -0.0024719238
+      }
+    }
+  ],
+  "sumBackgroundGravityForce": {
+    "x": 0,
+    "y": 0
+  },
+  "sumOverlapRepulsionForce": {
+    "x": 0,
+    "y": 0
+  },
+  "sumConnectedArcAttractionForce": {
+    "x": 0,
+    "y": 0
+  },
+  "sumTotalForce": {
+    "x": 0,
+    "y": 0
+  }
+}

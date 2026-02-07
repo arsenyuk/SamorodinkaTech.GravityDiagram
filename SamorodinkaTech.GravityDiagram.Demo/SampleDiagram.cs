@@ -5,19 +5,15 @@ namespace SamorodinkaTech.GravityDiagram.Demo;
 
 public static class SampleDiagram
 {
-    public static Diagram Create()
+    public static Diagram CreateThreeNode()
     {
         var diagram = new Diagram();
 
-        var n1 = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "Заказы", Position = new Vector2(120, 140), Width = 170, Height = 80 });
-        var n2 = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "Клиенты", Position = new Vector2(520, 150), Width = 170, Height = 80 });
-        var n3 = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "Склад", Position = new Vector2(340, 360), Width = 170, Height = 80 });
-        var n4 = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "Оплата", Position = new Vector2(780, 340), Width = 170, Height = 80 });
-        var n5 = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "Доставка", Position = new Vector2(640, 520), Width = 170, Height = 80 });
-        var n6 = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "Отчёты", Position = new Vector2(260, 560), Width = 170, Height = 80 });
+        var n1 = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "1", Position = new Vector2(260, 280), Width = 170, Height = 80 });
+        var n2 = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "2", Position = new Vector2(560, 220), Width = 170, Height = 80 });
+        var n3 = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "3", Position = new Vector2(560, 360), Width = 170, Height = 80 });
 
-        // Side rules: пример — снизу только исходящие, сверху только входящие.
-        foreach (var n in new[] { n1, n2, n3, n4, n5, n6 })
+        foreach (var n in new[] { n1, n2, n3 })
         {
             n.SetSideFlow(RectSide.Top, PortFlow.Incoming);
             n.SetSideFlow(RectSide.Bottom, PortFlow.Outgoing);
@@ -25,22 +21,35 @@ public static class SampleDiagram
             n.SetSideFlow(RectSide.Right, PortFlow.Both);
         }
 
-        var p1Out = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "создать", Ref = new PortRef(n1.Id, RectSide.Right, 0.55f) });
-        var p2In = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "получить", Ref = new PortRef(n2.Id, RectSide.Left, 0.45f) });
-        var p2Out = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "резерв", Ref = new PortRef(n2.Id, RectSide.Bottom, 0.65f) });
-        var p3In = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "резерв", Ref = new PortRef(n3.Id, RectSide.Top, 0.45f) });
-        var p3Out = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "списать", Ref = new PortRef(n3.Id, RectSide.Right, 0.55f) });
-        var p4In = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "счёт", Ref = new PortRef(n4.Id, RectSide.Left, 0.5f) });
-        var p4Out = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "оплачено", Ref = new PortRef(n4.Id, RectSide.Bottom, 0.35f) });
-        var p5In = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "отправить", Ref = new PortRef(n5.Id, RectSide.Top, 0.55f) });
-        var p5Out = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "статус", Ref = new PortRef(n5.Id, RectSide.Left, 0.6f) });
-        var p6In = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "лог", Ref = new PortRef(n6.Id, RectSide.Right, 0.4f) });
+        var p1Out = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "out", Ref = new PortRef(n1.Id, RectSide.Right, 0.5f) });
+        var p2In = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "in", Ref = new PortRef(n2.Id, RectSide.Left, 0.5f) });
+        var p3In = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "in", Ref = new PortRef(n3.Id, RectSide.Left, 0.5f) });
+
+        diagram.AddArc(new Arc { Id = DiagramId.New(), Text = "1→2", FromPortId = p1Out.Id, ToPortId = p2In.Id });
+        diagram.AddArc(new Arc { Id = DiagramId.New(), Text = "1→3", FromPortId = p1Out.Id, ToPortId = p3In.Id });
+
+        return diagram;
+    }
+
+    public static Diagram CreateTwoNode()
+    {
+        var diagram = new Diagram();
+
+        var n1 = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "A", Position = new Vector2(260, 280), Width = 170, Height = 80 });
+        var n2 = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "B", Position = new Vector2(560, 280), Width = 170, Height = 80 });
+
+        foreach (var n in new[] { n1, n2 })
+        {
+            n.SetSideFlow(RectSide.Top, PortFlow.Incoming);
+            n.SetSideFlow(RectSide.Bottom, PortFlow.Outgoing);
+            n.SetSideFlow(RectSide.Left, PortFlow.Both);
+            n.SetSideFlow(RectSide.Right, PortFlow.Both);
+        }
+
+        var p1Out = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "out", Ref = new PortRef(n1.Id, RectSide.Right, 0.5f) });
+        var p2In = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "in", Ref = new PortRef(n2.Id, RectSide.Left, 0.5f) });
 
         diagram.AddArc(new Arc { Id = DiagramId.New(), Text = "A→B", FromPortId = p1Out.Id, ToPortId = p2In.Id });
-        diagram.AddArc(new Arc { Id = DiagramId.New(), Text = "B→С", FromPortId = p2Out.Id, ToPortId = p3In.Id });
-        diagram.AddArc(new Arc { Id = DiagramId.New(), Text = "С→Оплата", FromPortId = p3Out.Id, ToPortId = p4In.Id });
-        diagram.AddArc(new Arc { Id = DiagramId.New(), Text = "Оплата→Доставка", FromPortId = p4Out.Id, ToPortId = p5In.Id });
-        diagram.AddArc(new Arc { Id = DiagramId.New(), Text = "Доставка→Отчёты", FromPortId = p5Out.Id, ToPortId = p6In.Id });
 
         return diagram;
     }

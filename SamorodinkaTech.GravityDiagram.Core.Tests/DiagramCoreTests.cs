@@ -6,6 +6,32 @@ namespace SamorodinkaTech.GravityDiagram.Core.Tests;
 public sealed class DiagramCoreTests
 {
     [Fact]
+    public void RectF_FromCenter_RoundTripsCenter()
+    {
+        var center = new Vector2(10, 20);
+        var r = RectF.FromCenter(center, width: 100, height: 40);
+
+        Assert.Equal(center.X, r.Center.X, 3);
+        Assert.Equal(center.Y, r.Center.Y, 3);
+    }
+
+    [Fact]
+    public void RectNode_BoundsCenter_EqualsPosition()
+    {
+        var n = new RectNode
+        {
+            Id = new DiagramId("n"),
+            Text = "N",
+            Position = new Vector2(-7, 13),
+            Width = 160,
+            Height = 80,
+        };
+
+        Assert.Equal(n.Position.X, n.Bounds.Center.X, 3);
+        Assert.Equal(n.Position.Y, n.Bounds.Center.Y, 3);
+    }
+
+    [Fact]
     public void AddPort_AutoDistributesOffsets_Proportionally()
     {
         var d = new Diagram { AutoDistributePorts = false };
@@ -99,7 +125,7 @@ public sealed class DiagramCoreTests
         var settings = new LayoutSettings
         {
             BackgroundPairGravity = 0f,
-            EdgeSpringK = 0f,
+            ConnectedArcAttractionK = 0f,
             OverlapRepulsionK = 0f,
             Drag = 0f,
             MaxSpeed = 1_000_000f,

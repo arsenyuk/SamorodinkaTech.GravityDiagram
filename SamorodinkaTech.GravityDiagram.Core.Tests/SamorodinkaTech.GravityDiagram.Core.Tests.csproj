@@ -22,4 +22,8 @@
     <ProjectReference Include="..\SamorodinkaTech.GravityDiagram.Core\SamorodinkaTech.GravityDiagram.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="TestData\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

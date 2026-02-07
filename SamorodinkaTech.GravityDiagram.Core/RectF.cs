@@ -17,6 +17,9 @@ public readonly record struct RectF(float X, float Y, float Width, float Height)
 	public bool Intersects(in RectF other)
 		=> !(Right <= other.Left || other.Right <= Left || Bottom <= other.Top || other.Bottom <= Top);
 
+	public bool Contains(Vector2 p)
+		=> p.X >= Left && p.X <= Right && p.Y >= Top && p.Y <= Bottom;
+
 	public (float overlapX, float overlapY) Overlap(in RectF other)
 	{
 		var ox = MathF.Min(Right, other.Right) - MathF.Max(Left, other.Left);

@@ -17,6 +17,15 @@
                     <TextBlock Text="Параметры раскладки" FontSize="16" FontWeight="SemiBold" />
                     <TextBlock Text="(меняются на лету)" Foreground="Gray" FontSize="12" />
 
+
+                    <Separator />
+
+                    <TextBlock Text="Модель диаграммы" />
+                    <ComboBox x:Name="ModelSelector" SelectedIndex="0" Width="220">
+                        <ComboBoxItem Content="Три ноды (1→2, 1→3)" />
+                        <ComboBoxItem Content="Две ноды (A→B)" />
+                    </ComboBox>
+
                     <Separator />
 
                     <TextBlock Text="Взаимное притяжение (BackgroundPairGravity)" />
@@ -25,10 +34,16 @@
                         <TextBlock x:Name="GravityValue" Width="70" VerticalAlignment="Center" />
                     </StackPanel>
 
-                    <TextBlock Text="Жёсткость дуг (EdgeSpringK)" />
+                    <TextBlock Text="Масса узла (NodeMass)" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Slider x:Name="SpringKSlider" Minimum="0" Maximum="12" Width="220" />
-                        <TextBlock x:Name="SpringKValue" Width="70" VerticalAlignment="Center" />
+                        <Slider x:Name="NodeMassSlider" Minimum="0.1" Maximum="200" Width="220" />
+                        <TextBlock x:Name="NodeMassValue" Width="70" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <TextBlock Text="Притяжение связанных узлов (ConnectedArcAttractionK)" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider x:Name="ConnectedAttractionSlider" Minimum="0" Maximum="12" Width="220" />
+                        <TextBlock x:Name="ConnectedAttractionValue" Width="70" VerticalAlignment="Center" />
                     </StackPanel>
 
                     <TextBlock Text="Длина дуги (EdgeSpringRestLength)" />
@@ -66,6 +81,11 @@
 
                     <Button x:Name="StabilizeButton" Content="Стабилизировать" />
                     <TextBlock Text="Подсказка: если всё дрожит — нажми “Стабилизировать”." Foreground="Gray" FontSize="12" />
+
+                    <Separator />
+
+                    <Button x:Name="DumpButton" Content="Сохранить дамп шага (JSON)" />
+                    <TextBlock x:Name="DumpStatus" Text="" Foreground="Gray" FontSize="12" TextWrapping="Wrap" />
                     </StackPanel>
                 </ScrollViewer>
             </Border>

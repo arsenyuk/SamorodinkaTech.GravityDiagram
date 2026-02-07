@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 4,
+  "createdAtUtc": "2026-02-07T05:32:53.469079+00:00",
+  "dt": 0.016666668,
+  "isMovingNow": false,
+  "willMoveNextStep": false,
+  "maxSpeed": 0,
+  "maxPredictedDelta": 0,
+  "maxPredictedDeltaIfNoForces": 0,
+  "settings": {
+    "nodeMass": 64.99332,
+    "softening": 50,
+    "backgroundPairGravity": 0.11509766,
+    "edgeSpringRestLength": 401.26953,
+    "connectedArcAttractionK": 10.638047,
+    "minimizeArcLength": true,
+    "minNodeSpacing": 55.441406,
+    "useHardMinSpacing": false,
+    "hardMinSpacingIterations": 9,
+    "hardMinSpacingSlop": 0.5,
+    "overlapRepulsionK": 200,
+    "softOverlapBoostWhenHardDisabled": 3.6114843,
+    "drag": 2.4,
+    "maxSpeed": 2400
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "6633e73ef7644e2d857e0908c6afcd47",
+        "text": "1",
+        "position": { "x": 287.665, "y": 258.83368 },
+        "velocity": { "x": 0, "y": 0 },
+        "width": 170,
+        "height": 80,
+        "mass": 64.99332,
+        "bounds": { "x": 202.66501, "y": 218.83368, "width": 170, "height": 80 }
+      },
+      {
+        "id": "59e664577b8b4adcb16fa0a559ac601b",
+        "text": "2",
+        "position": { "x": 483.81766, "y": 394.0221 },
+        "velocity": { "x": 0, "y": 0 },
+        "width": 170,
+        "height": 80,
+        "mass": 64.99332,
+        "bounds": { "x": 398.81766, "y": 354.0221, "width": 170, "height": 80 }
+      }
+    ],
+    "ports": [
+      {
+        "id": "d8432705084a4b60bb3280942b068951",
+        "text": "out",
+        "nodeId": "6633e73ef7644e2d857e0908c6afcd47",
+        "side": "Right",
+        "offset": 0.5,
+        "clampedOffset": 0.5,
+        "worldPosition": { "x": 372.665, "y": 258.83368 }
+      },
+      {
+        "id": "2e1f319ae4a142d486d8b2a1a36b6507",
+        "text": "in",
+        "nodeId": "59e664577b8b4adcb16fa0a559ac601b",
+        "side": "Left",
+        "offset": 0.5,
+        "clampedOffset": 0.5,
+        "worldPosition": { "x": 398.81766, "y": 394.0221 }
+      }
+    ],
+    "arcs": [
+      {
+        "id": "2698558802084e56909f469014b0ef82",
+        "text": "1\u21922",
+        "fromPortId": "d8432705084a4b60bb3280942b068951",
+        "toPortId": "2e1f319ae4a142d486d8b2a1a36b6507"
+      }
+    ]
+  },
+  "forces": [
+    {
+      "nodeId": "6633e73ef7644e2d857e0908c6afcd47",
+      "forceBackgroundGravity": { "x": 0.0066122017, "y": 0.0045571295 },
+      "forceOverlapRepulsion": { "x": 0, "y": -228.96451 },
+      "forceConnectedArcAttraction": { "x": 0, "y": 862.8845 },
+      "forceTotal": { "x": 0.0066122017, "y": 633.92456 },
+      "predictedPositionIfNoForces": { "x": 287.665, "y": 258.83368 },
+      "predictedVelocityIfNoForces": { "x": 0, "y": 0 },
+      "deltaPositionIfNoForces": { "x": 0, "y": 0 },
+      "predictedPositionBeforeConstraints": { "x": 287.665, "y": 258.83627 },
+      "predictedPosition": { "x": 287.665, "y": 258.83627 },
+      "deltaPositionBeforeConstraints": { "x": 0, "y": 0.0025939941 },
+      "deltaPosition": { "x": 0, "y": 0.0025939941 }
+    },
+    {
+      "nodeId": "59e664577b8b4adcb16fa0a559ac601b",
+      "forceBackgroundGravity": { "x": -0.0066122017, "y": -0.0045571295 },
+      "forceOverlapRepulsion": { "x": 0, "y": 228.96451 },
+      "forceConnectedArcAttraction": { "x": 0, "y": -862.8845 },
+      "forceTotal": { "x": -0.0066122017, "y": -633.92456 },
+      "predictedPositionIfNoForces": { "x": 483.81766, "y": 394.0221 },
+      "predictedVelocityIfNoForces": { "x": 0, "y": 0 },
+      "deltaPositionIfNoForces": { "x": 0, "y": 0 },
+      "predictedPositionBeforeConstraints": { "x": 483.81766, "y": 394.0195 },
+      "predictedPosition": { "x": 483.81766, "y": 394.0195 },
+      "deltaPositionBeforeConstraints": { "x": 0, "y": -0.0025939941 },
+      "deltaPosition": { "x": 0, "y": -0.0025939941 }
+    }
+  ],
+  "sumBackgroundGravityForce": { "x": 0, "y": 0 },
+  "sumOverlapRepulsionForce": { "x": 0, "y": 0 },
+  "sumConnectedArcAttractionForce": { "x": 0, "y": 0 },
+  "sumTotalForce": { "x": 0, "y": 0 }
+}
