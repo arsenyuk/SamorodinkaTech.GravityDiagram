@@ -15,7 +15,7 @@ public static class ArcRoutingGeometry
 		};
 
 	public static float ComputeOutDistance(float baseOutDistance, float minNodeSpacing)
-		=> MathF.Max(MathF.Max(0f, baseOutDistance), MathF.Max(0f, minNodeSpacing));
+		=> MathF.Max(0f, baseOutDistance);
 
 	public static Vector2 ComputeExitPoint(Vector2 portWorldPosition, RectSide side, float baseOutDistance, float minNodeSpacing)
 	{

@@ -2,9 +2,109 @@ using System.Collections.ObjectModel;
 using System.Numerics;
 
 namespace SamorodinkaTech.GravityDiagram.Core;
+public enum ArcType
+{
+	Polyline,
+	Straight
+}
+
+public class ArcLayoutOptions
+{
+	public ArcType Type { get; set; } = ArcType.Polyline;
+	public bool FixFirstPointToNormal { get; set; } = true;
+	public bool FixLastPointToNormal { get; set; } = true;
+}
 
 public sealed class GravityLayoutEngine
 {
+	// Static method for orthogonal polyline generation.
+	private static void MakeOrthogonalPolyline(Vector2 start, Vector2 end, RectSide startSide, RectSide endSide, List<Vector2> internalPoints)
+	{
+		const float portArcOffset = 24f;
+		var startDir = ArcRoutingGeometry.SideDir(startSide);
+		var endDir = ArcRoutingGeometry.SideDir(endSide);
+		var startOut = start + startDir * portArcOffset;
+		var endOut = end + endDir * portArcOffset;
+
+		internalPoints.Clear();
+		internalPoints.Add(startOut);
+
+		// Direct axis-aligned connection from the port exits.
+		if (MathF.Abs(startOut.X - endOut.X) < 0.001f || MathF.Abs(startOut.Y - endOut.Y) < 0.001f)
+		{
+			var delta = endOut - startOut;
+			if (IsDirectionCompatible(delta, startDir) && IsDirectionCompatible(-delta, endDir))
+			{
+				internalPoints.Add(endOut);
+				return;
+			}
+		}
+
+		// Try both L-shaped candidates first.
+		var firstCandidate = GetOrthogonalCorner(startOut, endOut, startAxisFirst: true);
+		if (IsValidOrthogonalCorner(startOut, firstCandidate, endOut, startDir, endDir))
+		{
+			internalPoints.Add(firstCandidate);
+			internalPoints.Add(endOut);
+			return;
+		}
+
+		var secondCandidate = GetOrthogonalCorner(startOut, endOut, startAxisFirst: false);
+		if (IsValidOrthogonalCorner(startOut, secondCandidate, endOut, startDir, endDir))
+		{
+			internalPoints.Add(secondCandidate);
+			internalPoints.Add(endOut);
+			return;
+		}
+
+		// If a simple L-shaped path would require reversing direction, fall back to a three-bend route.
+		if (MathF.Abs(startDir.X) > 0.001f)
+		{
+			var detourX = startOut.X + startDir.X * portArcOffset;
+			var approachY = endOut.Y + endDir.Y * portArcOffset;
+			internalPoints.Add(new Vector2(detourX, startOut.Y));
+			internalPoints.Add(new Vector2(detourX, approachY));
+			internalPoints.Add(new Vector2(endOut.X, approachY));
+		}
+		else
+		{
+			var detourY = startOut.Y + startDir.Y * portArcOffset;
+			var approachX = endOut.X + endDir.X * portArcOffset;
+			internalPoints.Add(new Vector2(startOut.X, detourY));
+			internalPoints.Add(new Vector2(approachX, detourY));
+			internalPoints.Add(new Vector2(approachX, endOut.Y));
+		}
+
+		internalPoints.Add(endOut);
+	}
+
+	private static Vector2 GetOrthogonalCorner(Vector2 startOut, Vector2 endOut, bool startAxisFirst)
+	{
+		if (startAxisFirst)
+		{
+			return startOut.X != endOut.X
+				? new Vector2(endOut.X, startOut.Y)
+				: new Vector2(startOut.X, endOut.Y);
+		}
+
+		return startOut.Y != endOut.Y
+			? new Vector2(startOut.X, endOut.Y)
+			: new Vector2(endOut.X, startOut.Y);
+	}
+
+	private static bool IsValidOrthogonalCorner(Vector2 startOut, Vector2 corner, Vector2 endOut, Vector2 startDir, Vector2 endDir)
+	{
+		var firstSegment = corner - startOut;
+		var secondSegment = endOut - corner;
+		return IsDirectionCompatible(firstSegment, startDir) && IsDirectionCompatible(secondSegment, -endDir);
+	}
+
+	private static bool IsDirectionCompatible(Vector2 delta, Vector2 direction)
+	{
+		if (MathF.Abs(direction.X) > 0.001f)
+			return MathF.Abs(delta.Y) < 0.001f && delta.X * direction.X >= 0f;
+		return MathF.Abs(delta.X) < 0.001f && delta.Y * direction.Y >= 0f;
+	}
 	private readonly LayoutSettings _settings;
 	private readonly Dictionary<DiagramId, Vector2> _lastForcesByNodeId = new();
 	private readonly Dictionary<DiagramId, Vector2[]> _lastArcPointForcesByArcId = new();
@@ -287,26 +387,16 @@ public sealed class GravityLayoutEngine
 	{
 		ApplyBackgroundGravity(nodes, total, background);
 		ApplyOverlapRepulsion(nodes, total, overlap);
-		// Legacy node-to-node arc springs are intentionally not used in the new model.
-		// Forces from arcs are transferred via arc endpoints (see ApplyArcPointForces).
+		// Restore node-to-node arc spring attraction to prevent nodes from flying apart.
+		ApplyArcSprings(diagram, nodes, nodeIndexById, total, arcSprings);
 		var arcPreviews = ApplyArcPointForces(diagram, nodes, nodeIndexById, total, arcPointEndpoint);
-		if (arcSprings is not null)
-		{
-			Array.Fill(arcSprings, Vector2.Zero);
-		}
 		return arcPreviews;
 	}
 
 	private float GetArcPointClearance()
 	{
-		// Keep arc-to-node clearance consistent with MinNodeSpacing semantics:
-		// MinNodeSpacing is an edge-to-edge distance between two rectangles, implemented as
-		// a per-rectangle margin of spacing/2 in both hard constraints and overlap repulsion.
-		// Arc internal points have no thickness, so they should respect the same per-rectangle
-		// margin, not the full spacing (which would effectively double required gaps).
-		var spacing = MathF.Max(0f, _settings.MinNodeSpacing) * 0.5f;
-		var extra = MathF.Max(0f, _settings.ArcPointExtraClearance);
-		return spacing + extra;
+		// Arc internal points have no thickness; clearance is controlled by explicit arc point margin only.
+		return MathF.Max(0f, _settings.ArcPointExtraClearance);
 	}
 
 	private IReadOnlyList<ArcStepPreview> ApplyArcPointForces(
@@ -452,7 +542,8 @@ public sealed class GravityLayoutEngine
 		ReadOnlyCollection<RectNode> nodes,
 		Dictionary<DiagramId, int> nodeIndexById,
 		Vector2[] nodeForces,
-		float dt)
+		float dt,
+		ArcLayoutOptions? arcOptions = null)
 	{
 		var k = MathF.Max(0f, _settings.ArcPointAttractionK);
 		var repulseK = MathF.Max(0f, _settings.ArcPointNodeRepulsionK);
@@ -471,29 +562,49 @@ public sealed class GravityLayoutEngine
 			var fromPort = diagram.TryGetPort(arc.FromPortId);
 			var toPort = diagram.TryGetPort(arc.ToPortId);
 			if (fromPort is null || toPort is null) continue;
-
 			if (!nodeIndexById.TryGetValue(fromPort.Ref.NodeId, out var ia) || !nodeIndexById.TryGetValue(toPort.Ref.NodeId, out var ib))
-			{
 				continue;
-			}
-
 			var fromNode = nodes[ia];
 			var toNode = nodes[ib];
 			var start = GetPortWorldPosition(fromNode, fromPort.Ref);
 			var end = GetPortWorldPosition(toNode, toPort.Ref);
-
-			// Ensure at least one internal point exists so the arc can bend.
-			if (arc.InternalPoints.Count == 0 && maxInternal > 0)
-			{
-				arc.InternalPoints.Add((start + end) * 0.5f);
-			}
-
+			var options = arcOptions ?? new ArcLayoutOptions();
 			var internalPoints = arc.InternalPoints;
-			if (internalPoints.Count == 0) continue;
-			if (internalPoints.Count > maxInternal)
+			const float portArcOffset = 24f;
+			var startSide = fromPort.Ref.Side;
+			var endSide = toPort.Ref.Side;
+			Vector2 startNormal = startSide switch
 			{
-				internalPoints.RemoveRange(maxInternal, internalPoints.Count - maxInternal);
+				RectSide.Top => new Vector2(0f, -1f),
+				RectSide.Right => new Vector2(1f, 0f),
+				RectSide.Bottom => new Vector2(0f, 1f),
+				RectSide.Left => new Vector2(-1f, 0f),
+				_ => Vector2.Zero
+			};
+			Vector2 endNormal = endSide switch
+			{
+				RectSide.Top => new Vector2(0f, -1f),
+				RectSide.Right => new Vector2(1f, 0f),
+				RectSide.Bottom => new Vector2(0f, 1f),
+				RectSide.Left => new Vector2(-1f, 0f),
+				_ => Vector2.Zero
+			};
+			if (options.Type == ArcType.Straight)
+			{
+				internalPoints.Clear();
+				if (options.FixFirstPointToNormal)
+					internalPoints.Add(start + startNormal * portArcOffset);
+				if (options.FixLastPointToNormal)
+					internalPoints.Add(end + endNormal * portArcOffset);
+				continue;
 			}
+
+			// Ортогональная ломаная: только горизонтальные и вертикальные сегменты
+			internalPoints.Clear();
+			MakeOrthogonalPolyline(start, end, startSide, endSide, internalPoints);
+			if (internalPoints.Count > maxInternal)
+				internalPoints.RemoveRange(maxInternal, internalPoints.Count - maxInternal);
+			// Убрана фиксация крайних точек по нормали
 
 			var forces = new Vector2[internalPoints.Count];
 
@@ -516,6 +627,8 @@ public sealed class GravityLayoutEngine
 				if (segIndex >= 0) forces[segIndex] += f;
 				if (segIndex + 1 < internalPoints.Count) forces[segIndex + 1] -= f;
 			}
+
+
 
 			// Repulsion from node bounds expanded by clearance, proportional to penetration.
 			if (repulseK > 0f)
@@ -604,35 +717,7 @@ public sealed class GravityLayoutEngine
 
 		// If the first/last internal point sits almost on the straight segment to its neighbor and is
 		// very close to the endpoint, it becomes a tiny visible stub; drop it.
-		const float maxTailLen = 8f;
-		const float onSegmentTol = 0.75f;
-
-		while (internalPoints.Count >= 2)
-		{
-			var p0 = internalPoints[0];
-			var p1 = internalPoints[1];
-			if (Vector2.DistanceSquared(start, p0) > maxTailLen * maxTailLen) break;
-			if (!IsPointOnSegmentApprox(start, p1, p0, onSegmentTol)) break;
-			internalPoints.RemoveAt(0);
-		}
-
-		while (internalPoints.Count >= 2)
-		{
-			var last = internalPoints.Count - 1;
-			var pN = internalPoints[last];
-			var pPrev = internalPoints[last - 1];
-			if (Vector2.DistanceSquared(end, pN) > maxTailLen * maxTailLen) break;
-			if (!IsPointOnSegmentApprox(end, pPrev, pN, onSegmentTol)) break;
-			internalPoints.RemoveAt(last);
-		}
-
-		// If only a single point remains and it collapses onto an endpoint, drop it.
-		if (internalPoints.Count == 1)
-		{
-			var p = internalPoints[0];
-			if (Vector2.DistanceSquared(start, p) < 0.0001f || Vector2.DistanceSquared(end, p) < 0.0001f)
-				internalPoints.Clear();
-		}
+		// ...existing code...
 	}
 
 	private static bool IsPointOnSegmentApprox(Vector2 a, Vector2 b, Vector2 p, float tol)
@@ -787,7 +872,7 @@ public sealed class GravityLayoutEngine
 	private void ApplyHardMinSpacing(ReadOnlyCollection<RectNode> nodes)
 	{
 		if (!_settings.UseHardMinSpacing) return;
-		var spacing = MathF.Max(0f, _settings.MinNodeSpacing);
+		var spacing = 0f;
 		if (spacing <= 0f) return;
 
 		var iterations = Math.Clamp(_settings.HardMinSpacingIterations, 0, 50);
@@ -906,11 +991,10 @@ public sealed class GravityLayoutEngine
 	private void ApplyOverlapRepulsion(ReadOnlyCollection<RectNode> nodes, Vector2[] total, Vector2[]? overlap)
 	{
 		var k = _settings.OverlapRepulsionK;
-		var spacing = MathF.Max(0f, _settings.MinNodeSpacing);
+		var spacing = 0f;
 
-		// When the hard MinNodeSpacing solver is disabled, repulsion becomes the primary mechanism
-		// to resolve overlaps. Boost and make it non-linear so intersecting rectangles separate
-		// faster (without needing extreme global tuning).
+		// When the hard MinNodeSpacing solver is disabled, repulsion is the primary mechanism
+		// to resolve overlaps. For rectangle-only layout, we do not expand node bounds by spacing.
 		var overlapBoost = _settings.UseHardMinSpacing
 			? 1f
 			: MathF.Max(0f, _settings.SoftOverlapBoostWhenHardDisabled);

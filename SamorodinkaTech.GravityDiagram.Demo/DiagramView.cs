@@ -300,7 +300,6 @@ public sealed class DiagramView : Control
             var simDt = WarmStartDt * LiveSimSpeed;
             var steps = (int)Math.Clamp(MathF.Ceiling(simDt / LiveMaxSubstepDt), 1f, LiveMaxSubstepsPerTick);
             var subDt = simDt / steps;
-
             for (var tick = 0; tick < WarmStartMaxTicksWithLabels; tick++)
             {
                 var pxBeforeX = new int[nodesCount];
@@ -1077,6 +1076,7 @@ public sealed class DiagramView : Control
 
             DrawPolyline(context, pen, r.Polyline);
             DrawArrowHead(context, arrowFill, pen, r.Polyline);
+            // Визуализация флагов фиксации
         }
     }
 
@@ -1147,9 +1147,9 @@ public sealed class DiagramView : Control
         }
     }
 
-    private static void DrawArrowHead(DrawingContext context, IBrush fill, Pen outline, List<Vector2> poly)
+    private static void DrawArrowHead(DrawingContext context, IBrush fill, Pen outline, IReadOnlyList<Vector2>? poly)
     {
-        if (poly.Count < 2) return;
+        if (poly is null || poly.Count < 2) return;
         var tip = poly[^1];
         // Use the last sufficiently-long segment for direction so arrowhead doesn't look broken
         // when the final into-port segment is extremely short.
@@ -1193,8 +1193,10 @@ public sealed class DiagramView : Control
         context.DrawGeometry(fill, outline, geom);
     }
 
-    private static void DrawPolyline(DrawingContext context, Pen pen, List<Vector2> points)
+    private static void DrawPolyline(DrawingContext context, Pen pen, IReadOnlyList<Vector2>? points)
     {
+        if (points is null) return;
+
         const float portDotRadius = 4f;
         for (var i = 0; i + 1 < points.Count; i++)
         {
@@ -1245,13 +1247,9 @@ public sealed class DiagramView : Control
         var outA = from + ArcRoutingGeometry.SideDir(fromSide) * outDistance;
         var outB = to + ArcRoutingGeometry.SideDir(toSide) * outDistance;
 
-        var cand1 = BuildOrthogonalCandidate(from, outA, outB, to, preferHorizontalFirst: true, laneOffset);
-        var cand2 = BuildOrthogonalCandidate(from, outA, outB, to, preferHorizontalFirst: false, laneOffset);
-
-        var score1 = ScoreCandidate(cand1, allNodes, fromNode, toNode, nodeClearance, lengthWeight, bendWeight, labelObstacles);
-        var score2 = ScoreCandidate(cand2, allNodes, fromNode, toNode, nodeClearance, lengthWeight, bendWeight, labelObstacles);
-        return score2 < score1 ? cand2 : cand1;
-    }
+        var preferHorizontalFirst = fromSide is RectSide.Left or RectSide.Right;
+        var candidate = BuildOrthogonalCandidate(from, outA, outB, to, preferHorizontalFirst, laneOffset);
+        return candidate;    }
 
     private static float ScoreCandidate(
         List<Vector2> poly,

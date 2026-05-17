@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Linq;
 
 namespace SamorodinkaTech.GravityDiagram.Core;
 
@@ -50,6 +51,26 @@ public sealed class Diagram
 
 	public RectNode? TryGetNode(DiagramId nodeId) => _nodes.FirstOrDefault(n => n.Id == nodeId);
 	public Port? TryGetPort(DiagramId portId) => _ports.FirstOrDefault(p => p.Id == portId);
+
+	public void SaveToFile(string path)
+	{
+		var arcsData = _arcs.Select(a => new {
+			a.Id,
+			a.FromPortId,
+			a.ToPortId,
+			a.Text,
+			InternalPoints = a.InternalPoints.Select(p => new { p.X, p.Y }).ToList(),
+			a.FixFirstPointToNormal,
+			a.FixLastPointToNormal
+		}).ToList();
+		var diagramData = new {
+			Nodes = _nodes,
+			Ports = _ports,
+			Arcs = arcsData
+		};
+		var json = System.Text.Json.JsonSerializer.Serialize(diagramData, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+		System.IO.File.WriteAllText(path, json);
+	}
 
 	private void DistributePortsProportionally(DiagramId nodeId, RectSide side)
 	{

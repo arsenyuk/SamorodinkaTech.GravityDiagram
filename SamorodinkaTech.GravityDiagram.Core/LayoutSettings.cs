@@ -1,4 +1,4 @@
-namespace SamorodinkaTech.GravityDiagram.Core;
+using SamorodinkaTech.GravityDiagram.Core;
 
 public sealed class LayoutSettings
 {
@@ -35,7 +35,6 @@ public sealed class LayoutSettings
 	public int ArcPointConstraintIterations { get; set; } = 6;
 
 	// Extra clearance margin used for arc points and arc segments against nodes.
-	// This is in addition to MinNodeSpacing.
 	public float ArcPointExtraClearance { get; set; } = 0f;
 
 	// Upper bound to prevent runaway insertion/repair.
@@ -45,10 +44,11 @@ public sealed class LayoutSettings
 	public bool MinimizeArcLength { get; set; } = false;
 
 	// Minimum edge-to-edge distance between rectangles.
-	public float MinNodeSpacing { get; set; } = 40f;
+	// NOTE: this setting is preserved for compatibility but is no longer used in layout calculations.
+	public float MinNodeSpacing { get; set; } = 0f;
 
 	// If true, applies a hard post-step constraint solver that enforces MinNodeSpacing.
-	public bool UseHardMinSpacing { get; set; } = true;
+	public bool UseHardMinSpacing { get; set; } = false;
 	public int HardMinSpacingIterations { get; set; } = 4;
 	public float HardMinSpacingSlop { get; set; } = 0.5f;
 
@@ -59,4 +59,7 @@ public sealed class LayoutSettings
 	public float SoftOverlapBoostWhenHardDisabled { get; set; } = 4f;
 	public float Drag { get; set; } = 2.2f;
 	public float MaxSpeed { get; set; } = 2500f;
+
+	// --- Arc layout options ---
+	public ArcLayoutOptions ArcLayoutOptions { get; set; } = new ArcLayoutOptions();
 }

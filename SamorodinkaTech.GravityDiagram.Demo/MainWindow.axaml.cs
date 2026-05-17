@@ -47,11 +47,11 @@ public partial class MainWindow : Window
         BindSlider("RestLenSlider", "RestLenValue", () => s.EdgeSpringRestLength, v => s.EdgeSpringRestLength = v, "0");
         BindSlider("RepulsionSlider", "RepulsionValue", () => s.OverlapRepulsionK, v => s.OverlapRepulsionK = v, "0");
         BindSlider("SoftOverlapBoostSlider", "SoftOverlapBoostValue", () => s.SoftOverlapBoostWhenHardDisabled, v => s.SoftOverlapBoostWhenHardDisabled = v, "0.00");
-        BindSlider("MinSpacingSlider", "MinSpacingValue", () => s.MinNodeSpacing, v => s.MinNodeSpacing = v, "0");
-        BindSlider("HardIterSlider", "HardIterValue", () => s.HardMinSpacingIterations, v => s.HardMinSpacingIterations = (int)Math.Round(v), "0");
 
         BindCheckBox("MinimizeArcCheck", () => s.MinimizeArcLength, v => s.MinimizeArcLength = v);
-        BindCheckBox("HardSpacingCheck", () => s.UseHardMinSpacing, v => s.UseHardMinSpacing = v);
+        var arcOpts = DiagramView.Engine.Settings.ArcLayoutOptions;
+        BindCheckBox("FixFirstPointToNormalCheck", () => arcOpts.FixFirstPointToNormal, v => arcOpts.FixFirstPointToNormal = v);
+        BindCheckBox("FixLastPointToNormalCheck", () => arcOpts.FixLastPointToNormal, v => arcOpts.FixLastPointToNormal = v);
 
         var stabilize = this.FindControl<Button>("StabilizeButton");
         stabilize.Click += (_, _) => DiagramView.StabilizeLayout();

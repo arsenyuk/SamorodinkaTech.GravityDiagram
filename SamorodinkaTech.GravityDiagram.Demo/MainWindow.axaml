@@ -64,14 +64,9 @@
                         <TextBlock x:Name="SoftOverlapBoostValue" Width="70" VerticalAlignment="Center" />
                     </StackPanel>
 
-                    <TextBlock Text="Минимальная дистанция (MinNodeSpacing)" />
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Slider x:Name="MinSpacingSlider" Minimum="0" Maximum="120" Width="220" />
-                        <TextBlock x:Name="MinSpacingValue" Width="70" VerticalAlignment="Center" />
-                    </StackPanel>
-
                     <CheckBox x:Name="MinimizeArcCheck" Content="Дуги минимизируют длину (физика)" />
-                    <CheckBox x:Name="HardSpacingCheck" Content="Жёстко соблюдать MinNodeSpacing" />
+                    <CheckBox x:Name="FixFirstPointToNormalCheck" Content="Фиксировать первую точку дуги по нормали" />
+                    <CheckBox x:Name="FixLastPointToNormalCheck" Content="Фиксировать последнюю точку дуги по нормали" />
 
                     <TextBlock Text="Итерации жёсткого разведения" />
                     <StackPanel Orientation="Horizontal" Spacing="8">

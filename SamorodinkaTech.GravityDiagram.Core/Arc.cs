@@ -9,6 +9,9 @@ public sealed class Arc
 	public required DiagramId ToPortId { get; init; }
 	public required string Text { get; set; }
 
+	public bool FixFirstPointToNormal { get; set; } = true;
+	public bool FixLastPointToNormal { get; set; } = true;
+
 	// Internal polyline points (excluding endpoints on ports).
 	// These points are updated by the gravity model and can be merged.
 	public List<Vector2> InternalPoints { get; } = new();
