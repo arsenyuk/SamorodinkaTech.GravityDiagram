@@ -77,7 +77,6 @@ public sealed class DemoSettingsStore
         float ConnectedArcAttractionK,
         float EdgeSpringRestLength,
         bool MinimizeArcLength,
-        float MinNodeSpacing,
         bool UseHardMinSpacing,
         int HardMinSpacingIterations,
         float HardMinSpacingSlop,
@@ -94,7 +93,6 @@ public sealed class DemoSettingsStore
             ConnectedArcAttractionK: s.ConnectedArcAttractionK,
             EdgeSpringRestLength: s.EdgeSpringRestLength,
             MinimizeArcLength: s.MinimizeArcLength,
-            MinNodeSpacing: s.MinNodeSpacing,
             UseHardMinSpacing: s.UseHardMinSpacing,
             HardMinSpacingIterations: s.HardMinSpacingIterations,
             HardMinSpacingSlop: s.HardMinSpacingSlop,
@@ -115,7 +113,6 @@ public sealed class DemoSettingsStore
             s.ConnectedArcAttractionK = ConnectedArcAttractionK;
             s.EdgeSpringRestLength = EdgeSpringRestLength;
             s.MinimizeArcLength = MinimizeArcLength;
-            s.MinNodeSpacing = MinNodeSpacing;
             s.UseHardMinSpacing = UseHardMinSpacing;
             s.HardMinSpacingIterations = HardMinSpacingIterations;
             s.HardMinSpacingSlop = HardMinSpacingSlop;

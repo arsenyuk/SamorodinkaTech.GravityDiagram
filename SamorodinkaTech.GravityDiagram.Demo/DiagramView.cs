@@ -37,9 +37,8 @@ public sealed class DiagramView : Control
     private const float ArcLabelDistanceFromArc = 4f;
 
     // IMPORTANT: port headers should be fixed relative to their ports (no independent drifting).
-    // To prevent rectangles from covering foreign port headers, we move NODES (not headers).
     private const bool EnableArcLabelAwareNodeMovement = false;
-    private const bool EnablePortLabelAwareNodeMovement = true;
+    private const bool EnablePortLabelAwareNodeMovement = false;
 
     private const int LabelAwareSeparationIterations = 2;
     private const float LabelAwareNodePushPadding = 1f;
@@ -103,7 +102,6 @@ public sealed class DiagramView : Control
     private readonly Dictionary<DiagramId, float> _arcExtraLaneShiftById = new();
 
     // Label placement caches.
-    private readonly Dictionary<DiagramId, Vector2> _portLabelOriginById = new();
     private readonly Dictionary<DiagramId, Vector2> _arcLabelOriginById = new();
     private readonly List<RectF> _lastPlacedLabelObstacles = new();
 
@@ -132,10 +130,8 @@ public sealed class DiagramView : Control
                 BackgroundPairGravity = 0.06f,
             EdgeSpringRestLength = 220f,
 			ConnectedArcAttractionK = 6.0f,
-            // Arcs try to shorten, but stop pulling once MinNodeSpacing is reached.
             MinimizeArcLength = true,
                 OverlapRepulsionK = 35f,
-            MinNodeSpacing = 8f,
                 UseHardMinSpacing = true,
                 HardMinSpacingIterations = 6,
                 HardMinSpacingSlop = 0.5f,
@@ -452,22 +448,7 @@ public sealed class DiagramView : Control
 
     private void DrawDebugOverlay(DrawingContext context)
     {
-        // 1) Show min-spacing bounds around rectangles.
-        var spacing = Engine.Settings.MinNodeSpacing;
-        if (spacing > 0.1f)
-        {
-            var dash = new DashStyle(new double[] { 4, 4 }, 0);
-            var pen = new Pen(new SolidColorBrush(Color.FromRgb(230, 120, 70)), 1, dashStyle: dash);
-            foreach (var node in Diagram.Nodes)
-            {
-                var r = node.Bounds;
-                var m = spacing / 2f;
-                var rr = new Rect(r.Left - m, r.Top - m, r.Width + 2 * m, r.Height + 2 * m);
-                context.DrawRectangle(null, pen, rr, 10);
-            }
-        }
-
-        // 2) Show net force vectors (sum of all forces) per node.
+        // 1) Show net force vectors (sum of all forces) per node.
         var forces = Engine.LastForcesByNodeId;
         if (forces.Count == 0) return;
 
@@ -679,16 +660,6 @@ public sealed class DiagramView : Control
         // 5) Place labels again using final routes.
         var placed2 = PlaceAllLabels(routed2);
 
-        // 6) Ensure nodes don't cover foreign port headers (move nodes, not headers).
-        if (EnablePortLabelAwareNodeMovement && ApplyPortLabelAwareNodeSpacing(placed2))
-        {
-            var labelObstacles2 = placed2.AllLabelRects.Select(ToRectF).ToList();
-            var routed3 = ComputeRoutedArcs(labelObstacles2);
-            var placed3 = PlaceAllLabels(routed3);
-            routed2 = routed3;
-            placed2 = placed3;
-        }
-
         _lastPlacedLabelObstacles.Clear();
         _lastPlacedLabelObstacles.AddRange(placed2.AllLabelRects.Select(ToRectF));
 
@@ -713,7 +684,7 @@ public sealed class DiagramView : Control
     {
         if (placed.ArcLabelRects.Count == 0) return;
 
-        // Build obstacles: ARC labels only. Port labels are handled by ApplyPortLabelAwareNodeSpacing().
+        // Build obstacles: ARC labels only. Port labels are disabled in this view.
         var obstacles = placed.ArcLabelRects.Values.Select(ToRectF).ToArray();
 
         // Quick overlap check: if no node intersects any label (except own-port labels), do nothing.
@@ -801,263 +772,6 @@ public sealed class DiagramView : Control
                 Diagram.Nodes[i].Velocity = Vector2.Zero;
             }
         }
-    }
-
-    private bool ApplyPortLabelAwareNodeSpacing(PlacedLabels placed)
-    {
-        // Don't fight user interaction: port label spacing can make drag feel broken.
-        if (_dragNode is not null) return false;
-
-        if (placed.PortLabelRects.Count == 0) return false;
-        if (Diagram.Nodes.Count < 2) return false;
-
-        // Treat each node's effective obstacle as the union of:
-        // - the node rectangle
-        // - ALL port label rectangles that belong to that node
-        // Then resolve overlaps pairwise by pushing nodes apart.
-        // This produces a true “min spacing depends on port label layout”.
-
-        var nodeIndexById = new Dictionary<DiagramId, int>(Diagram.Nodes.Count);
-        for (var i = 0; i < Diagram.Nodes.Count; i++)
-            nodeIndexById[Diagram.Nodes[i].Id] = i;
-
-        var portById = Diagram.Ports.ToDictionary(p => p.Id, p => p);
-
-        // Cache owned port header data per node. We recompute the actual header rects as a function
-        // of the hypothetical node position (pos) to keep behavior correct even if headers are
-        // clamped to view bounds.
-        var ownedPortHeaders = new List<(PortRef Ref, Vector2 Size)>[Diagram.Nodes.Count];
-        for (var i = 0; i < ownedPortHeaders.Length; i++) ownedPortHeaders[i] = new List<(PortRef, Vector2)>();
-
-        foreach (var kv in placed.PortLabelRects)
-        {
-            if (!portById.TryGetValue(kv.Key, out var port)) continue;
-            if (!nodeIndexById.TryGetValue(port.Ref.NodeId, out var nodeIndex)) continue;
-
-            var r = kv.Value;
-            var size = new Vector2((float)r.Width, (float)r.Height);
-            ownedPortHeaders[nodeIndex].Add((port.Ref, size));
-        }
-
-        var fixedIndex = -1;
-        if (_dragNode is not null)
-        {
-            for (var i = 0; i < Diagram.Nodes.Count; i++)
-            {
-                if (ReferenceEquals(Diagram.Nodes[i], _dragNode))
-                {
-                    fixedIndex = i;
-                    break;
-                }
-            }
-        }
-
-        // Important:
-        // - Port headers do NOT move; nodes move.
-        // - Other rectangles must not cover foreign port headers.
-        // Implement this by treating each node's rectangle expanded by MinNodeSpacing/2 as the
-        // "rectangle with offset" area, unioned with its owned port header blocks.
-        // This stays local (only resolves real overlaps) and does not re-enforce full min spacing.
-        var nodeMargin = MathF.Max(0f, Engine.Settings.MinNodeSpacing) * 0.5f;
-        var labelPad = MathF.Max(0f, LabelBackgroundPadding);
-
-        var viewW = (float)Math.Max(0, Bounds.Width);
-        var viewH = (float)Math.Max(0, Bounds.Height);
-
-        // Hysteresis to avoid micro-oscillations when rectangles are just touching.
-        // Values are in world units (pixels).
-        const float overlapEpsilon = 0.20f;
-        const float overlapSlop = 0.00f;
-
-        RectF EffectiveObstacle(int nodeIndex, Vector2 pos)
-        {
-            var n = Diagram.Nodes[nodeIndex];
-            var union = Expand(RectF.FromCenter(pos, n.Width, n.Height), nodeMargin);
-
-            var list = ownedPortHeaders[nodeIndex];
-            for (var k = 0; k < list.Count; k++)
-            {
-                var (pref, size) = list[k];
-                var nodeAtPos = new RectNode
-                {
-                    Id = n.Id,
-                    Text = n.Text,
-                    Position = pos,
-                    Velocity = Vector2.Zero,
-                    Width = n.Width,
-                    Height = n.Height,
-                };
-
-                var portPoint = GravityLayoutEngine.GetPortWorldPosition(nodeAtPos, pref);
-                var preferredOrigin = GetPortLabelPreferredOrigin(pref.Side, portPoint, size);
-
-                // Match actual draw behavior: clamp into view.
-                var maxX = MathF.Max(0f, viewW - size.X);
-                var maxY = MathF.Max(0f, viewH - size.Y);
-                // NOTE: do not round here; rounding makes the constraint discontinuous and can cause jitter.
-                // The label block is expanded by LabelBackgroundPadding anyway, so this is conservative.
-                var origin = new Vector2(
-                    MathF.Min(MathF.Max(preferredOrigin.X, 0f), maxX),
-                    MathF.Min(MathF.Max(preferredOrigin.Y, 0f), maxY));
-
-                var lr = new RectF(
-                    origin.X - labelPad,
-                    origin.Y - labelPad,
-                    size.X + 2 * labelPad,
-                    size.Y + 2 * labelPad);
-                union = UnionRects(union, lr);
-            }
-            return union;
-        }
-
-        static (float Ox, float Oy) Overlap(in RectF a, in RectF b)
-        {
-            var ox = MathF.Min(a.Right, b.Right) - MathF.Max(a.Left, b.Left);
-            var oy = MathF.Min(a.Bottom, b.Bottom) - MathF.Max(a.Top, b.Top);
-            return (ox, oy);
-        }
-
-        static Vector2 SeparationVectorExact(in RectF a, in RectF b, float slop, float eps, string tieA, string tieB)
-        {
-            var (ox, oy) = Overlap(a, b);
-            var px = ox - eps;
-            var py = oy - eps;
-            if (px <= 0f || py <= 0f) return Vector2.Zero;
-
-            var ac = Center(a);
-            var bc = Center(b);
-            if (px < py)
-            {
-                var sx = (float)MathF.Sign(ac.X - bc.X);
-                if (MathF.Abs(sx) < 0.001f)
-                {
-                    sx = string.CompareOrdinal(tieA, tieB) < 0 ? -1f : 1f;
-                }
-                return new Vector2(sx * (px + slop), 0f);
-            }
-            else
-            {
-                var sy = (float)MathF.Sign(ac.Y - bc.Y);
-                if (MathF.Abs(sy) < 0.001f)
-                {
-                    sy = string.CompareOrdinal(tieA, tieB) < 0 ? -1f : 1f;
-                }
-                return new Vector2(0f, sy * (py + slop));
-            }
-        }
-
-        var currentPos = Diagram.Nodes.Select(n => n.Position).ToArray();
-
-        bool HasAnyOverlap()
-        {
-            for (var i = 0; i < Diagram.Nodes.Count; i++)
-            {
-                for (var j = i + 1; j < Diagram.Nodes.Count; j++)
-                {
-                    var ri = EffectiveObstacle(i, currentPos[i]);
-                    var rj = EffectiveObstacle(j, currentPos[j]);
-                    var (ox, oy) = Overlap(ri, rj);
-                    if (ox > overlapEpsilon && oy > overlapEpsilon) return true;
-                }
-            }
-            return false;
-        }
-
-        if (!HasAnyOverlap()) return false;
-
-        const int portHeaderSeparationIterations = 8;
-        const float portHeaderPushDamping = 0.35f;
-        const float portHeaderMaxMovePerUpdate = 10f;
-
-        for (var iter = 0; iter < portHeaderSeparationIterations; iter++)
-        {
-            var any = false;
-            var deltas = new Vector2[Diagram.Nodes.Count];
-
-            for (var i = 0; i < Diagram.Nodes.Count; i++)
-            {
-                for (var j = i + 1; j < Diagram.Nodes.Count; j++)
-                {
-                    var ri = EffectiveObstacle(i, currentPos[i]);
-                    var rj = EffectiveObstacle(j, currentPos[j]);
-
-                    var push = SeparationVectorExact(
-                        ri,
-                        rj,
-                        slop: overlapSlop,
-                        eps: overlapEpsilon,
-                        tieA: Diagram.Nodes[i].Id.Value,
-                        tieB: Diagram.Nodes[j].Id.Value);
-                    if (push.LengthSquared() < 0.0001f) continue;
-
-                    any = true;
-
-                    var iFixed = i == fixedIndex;
-                    var jFixed = j == fixedIndex;
-
-                    if (iFixed && jFixed)
-                        continue;
-
-                    if (iFixed)
-                    {
-                        deltas[j] -= push;
-                    }
-                    else if (jFixed)
-                    {
-                        deltas[i] += push;
-                    }
-                    else
-                    {
-                        deltas[i] += push * 0.5f;
-                        deltas[j] -= push * 0.5f;
-                    }
-                }
-            }
-
-            if (!any) break;
-
-            // Subtract mean displacement to avoid global drift.
-            var sum = Vector2.Zero;
-            var count = 0;
-            for (var i = 0; i < deltas.Length; i++)
-            {
-                if (deltas[i].LengthSquared() > 0.0001f)
-                {
-                    sum += deltas[i];
-                    count++;
-                }
-            }
-            var mean = count > 0 ? (sum / count) : Vector2.Zero;
-            if (count <= 1) mean = Vector2.Zero;
-
-            for (var i = 0; i < Diagram.Nodes.Count; i++)
-            {
-                var d = deltas[i];
-                if (d.LengthSquared() < 0.0001f) continue;
-
-                d = (d - mean) * portHeaderPushDamping;
-                var len = d.Length();
-                if (len > portHeaderMaxMovePerUpdate)
-                {
-                    d = d / MathF.Max(0.0001f, len) * portHeaderMaxMovePerUpdate;
-                }
-
-                currentPos[i] += d;
-            }
-        }
-
-        // Apply final positions.
-        var movedAny = false;
-        for (var i = 0; i < Diagram.Nodes.Count; i++)
-        {
-            var d = currentPos[i] - Diagram.Nodes[i].Position;
-            if (d.LengthSquared() < 0.0001f) continue;
-            Diagram.Nodes[i].Position = currentPos[i];
-            Diagram.Nodes[i].Velocity = Vector2.Zero;
-            movedAny = true;
-        }
-
-        return movedAny;
     }
 
     private void DrawArcs(DrawingContext context, IReadOnlyList<RoutedArc> routed)
@@ -1370,38 +1084,11 @@ public sealed class DiagramView : Control
 
         var polylines = routed.Select(r => r.Polyline).ToList();
 
-        // 1) Place PORT labels deterministically and FIXED (no solver, no collision-based movement).
-        // Port headers must not drift; nodes will be moved to avoid covering foreign headers.
-        var portsOrdered = Diagram.Ports.OrderBy(p => p.Id.Value, StringComparer.Ordinal).ToArray();
-        var placedPortRects = new Dictionary<DiagramId, Rect>(portsOrdered.Length);
-        var placedPortRectsList = new List<RectF>(portsOrdered.Length);
+        // Port labels are disabled; only arc labels are placed.
+        var placedPortRects = new Dictionary<DiagramId, Rect>();
+        var placedPortRectsList = Array.Empty<RectF>();
 
-        foreach (var port in portsOrdered)
-        {
-            if (string.IsNullOrWhiteSpace(port.Text)) continue;
-            var node = Diagram.Nodes.FirstOrDefault(n => n.Id == port.Ref.NodeId);
-            if (node is null) continue;
-
-            var p = GravityLayoutEngine.GetPortWorldPosition(node, port.Ref);
-            var size = MeasureLabel(port.Text, LabelFontSize, LabelMaxWidth);
-            var preferred = GetPortLabelPreferredOrigin(port.Ref.Side, p, size);
-
-            var maxX = MathF.Max(0f, viewW - size.X);
-            var maxY = MathF.Max(0f, viewH - size.Y);
-
-            // IMPORTANT: do not round origins here.
-            // Rounding creates discontinuities (1px jumps) that can feed into the
-            // port-header-aware node spacing pass and prevent pixel-stable auto-stop.
-            var origin = new Vector2(
-                MathF.Min(MathF.Max(preferred.X, 0f), maxX),
-                MathF.Min(MathF.Max(preferred.Y, 0f), maxY));
-
-            var rect = new Rect(origin.X, origin.Y, size.X, size.Y);
-            placedPortRects[port.Id] = rect;
-            placedPortRectsList.Add(ToRectF(rect));
-        }
-
-        // 2) Place ARC labels via iterative solver, avoiding nodes + already placed port labels.
+        // 1) Place ARC labels via iterative solver, avoiding nodes.
         var arcCandidates = new List<LabelCandidate>(Diagram.Arcs.Count);
         foreach (var r in routed)
         {
@@ -1435,15 +1122,7 @@ public sealed class DiagramView : Control
 
     private void DrawLabels(DrawingContext context, PlacedLabels placed)
     {
-        var portTextBrush = Brushes.DimGray;
         var arcTextBrush = Brushes.DarkSlateGray;
-
-        foreach (var port in Diagram.Ports)
-        {
-            if (string.IsNullOrWhiteSpace(port.Text)) continue;
-            if (!placed.PortLabelRects.TryGetValue(port.Id, out var r)) continue;
-            DrawLabelWithBackground(context, port.Text, r, portTextBrush, LabelFontSize);
-        }
 
         foreach (var arc in Diagram.Arcs)
         {

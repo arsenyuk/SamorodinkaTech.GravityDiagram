@@ -220,7 +220,6 @@ public static class GravityModelDumpWriter
             EdgeSpringRestLength = s.EdgeSpringRestLength;
             ConnectedArcAttractionK = s.ConnectedArcAttractionK;
             MinimizeArcLength = s.MinimizeArcLength;
-            MinNodeSpacing = s.MinNodeSpacing;
             UseHardMinSpacing = s.UseHardMinSpacing;
             HardMinSpacingIterations = s.HardMinSpacingIterations;
             HardMinSpacingSlop = s.HardMinSpacingSlop;
@@ -244,7 +243,6 @@ public static class GravityModelDumpWriter
         public float EdgeSpringRestLength { get; init; }
         public float ConnectedArcAttractionK { get; init; }
         public bool MinimizeArcLength { get; init; }
-        public float MinNodeSpacing { get; init; }
         public bool UseHardMinSpacing { get; init; }
         public int HardMinSpacingIterations { get; init; }
         public float HardMinSpacingSlop { get; init; }
