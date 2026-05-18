@@ -8,7 +8,6 @@ using Xunit;
 
 namespace SamorodinkaTech.GravityDiagram.Core.Tests;
 
-#if false // Example-based dump tests are temporarily disabled (dump schema and physics model changed).
 public sealed class FrozenLayoutDumpTests
 {
     [Fact]
@@ -277,4 +276,3 @@ public sealed class FrozenLayoutDumpTests
 
     private sealed record DumpVec2(float X, float Y);
 }
-#endif

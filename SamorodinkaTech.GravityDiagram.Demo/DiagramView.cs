@@ -107,6 +107,7 @@ public sealed class DiagramView : Control
 
     private IReadOnlyList<RoutedArc>? _cachedRoutedArcs;
     private PlacedLabels? _cachedPlacedLabels;
+    private System.Collections.Generic.List<(Vector2 A, Vector2 B, DiagramId NodeId, DiagramId ArcId)> _lastViolationMarkers = new();
 
     private RectNode? _dragNode;
     private Vector2 _dragOffset;
@@ -831,11 +832,90 @@ public sealed class DiagramView : Control
             // Avoid tiny "tails" close to port points (common when internal points merge).
             TrimShortEndpointSegments(poly, minLen: 6f);
 
+            // Diagnostic + on-the-fly repair: detect any segment that strictly intersects a node interior
+            // and insert a simple orthogonal waypoint to detour around the node for demo visualization.
+            var safetyLoop = 0;
+            for (var si = 0; si + 1 < poly.Count && safetyLoop < 64; si++)
+            {
+                safetyLoop++;
+                var pa = poly[si];
+                var pb = poly[si + 1];
+                var repaired = false;
+                foreach (var node in Diagram.Nodes)
+                {
+                    // skip endpoints' own nodes
+                    if (node.Id == fromPort.Ref.NodeId || node.Id == toPort.Ref.NodeId)
+                        continue;
+                    if (!AxisAlignedSegmentIntersectsRect(pa, pb, node.Bounds))
+                        continue;
+
+                    Console.WriteLine($"[diag] Arc {arc.Id} segment {si} intersects node {node.Id}");
+                    _lastViolationMarkers.Add((pa, pb, node.Id, arc.Id));
+
+                    // Insert a waypoint that detours outside node.Bounds by ArcNodeClearance.
+                    var mid = (pa + pb) * 0.5f;
+                    var dLeft = MathF.Abs(mid.X - node.Bounds.Left);
+                    var dRight = MathF.Abs(node.Bounds.Right - mid.X);
+                    var dTop = MathF.Abs(mid.Y - node.Bounds.Top);
+                    var dBottom = MathF.Abs(node.Bounds.Bottom - mid.Y);
+                    var side = 0;
+                    var min = dLeft;
+                    if (dRight < min) { min = dRight; side = 1; }
+                    if (dTop < min) { min = dTop; side = 2; }
+                    if (dBottom < min) { min = dBottom; side = 3; }
+
+                    var margin = ArcNodeClearance;
+                    Vector2 waypoint = side switch
+                    {
+                        0 => new Vector2(node.Bounds.Left - margin, Math.Clamp(mid.Y, node.Bounds.Top - margin, node.Bounds.Bottom + margin)),
+                        1 => new Vector2(node.Bounds.Right + margin, Math.Clamp(mid.Y, node.Bounds.Top - margin, node.Bounds.Bottom + margin)),
+                        2 => new Vector2(Math.Clamp(mid.X, node.Bounds.Left - margin, node.Bounds.Right + margin), node.Bounds.Top - margin),
+                        3 => new Vector2(Math.Clamp(mid.X, node.Bounds.Left - margin, node.Bounds.Right + margin), node.Bounds.Bottom + margin),
+                        _ => mid,
+                    };
+
+                    poly.Insert(si + 1, waypoint);
+                    repaired = true;
+                    break;
+                }
+                if (repaired)
+                {
+                    // back up one segment to re-check the newly inserted waypoint's segments
+                    si = Math.Max(-1, si - 1);
+                    continue;
+                }
+            }
+
             var (labelPos, labelNormal) = GetPolylineMidpointWithNormal(poly);
             routed.Add(new RoutedArc(arc, poly, labelPos, labelNormal));
         }
 
         return routed;
+    }
+
+    private void DrawViolationMarkers(DrawingContext context)
+    {
+        if (_lastViolationMarkers == null || _lastViolationMarkers.Count == 0) return;
+        var pen = new Pen(Brushes.Red, 2);
+        var brush = Brushes.Red;
+        foreach (var v in _lastViolationMarkers)
+        {
+            var mid = (v.A + v.B) * 0.5f;
+            var p = new Point(mid.X, mid.Y);
+            // small cross
+            context.DrawLine(pen, new Point(p.X - 6, p.Y - 6), new Point(p.X + 6, p.Y + 6));
+            context.DrawLine(pen, new Point(p.X - 6, p.Y + 6), new Point(p.X + 6, p.Y - 6));
+
+            // outline node bounds
+            var node = Diagram.Nodes.FirstOrDefault(n => n.Id == v.NodeId);
+            if (node is not null)
+            {
+                var r = node.Bounds;
+                var rect = new Rect(r.Left, r.Top, r.Width, r.Height);
+                var outline = new Pen(Brushes.Red, 1.6);
+                context.DrawRectangle(null, outline, rect);
+            }
+        }
     }
 
     private static void TrimShortEndpointSegments(List<Vector2> poly, float minLen)
@@ -1590,6 +1670,40 @@ public sealed class DiagramView : Control
 
     private static RectF ToRectF(Rect r) => new((float)r.X, (float)r.Y, (float)r.Width, (float)r.Height);
 
+    private static bool AxisAlignedSegmentIntersectsAvaloniaRect(Vector2 a, Vector2 b, Rect r)
+    {
+        // Vertical segment
+        if (MathF.Abs(a.X - b.X) < 0.001f)
+        {
+            var x = a.X;
+            if (x <= (float)r.X || x >= (float)(r.X + r.Width)) return false;
+            var y0 = MathF.Min(a.Y, b.Y);
+            var y1 = MathF.Max(a.Y, b.Y);
+            if (y1 <= (float)r.Y || y0 >= (float)(r.Y + r.Height)) return false;
+            return true;
+        }
+
+        // Horizontal segment
+        if (MathF.Abs(a.Y - b.Y) < 0.001f)
+        {
+            var y = a.Y;
+            if (y <= (float)r.Y || y >= (float)(r.Y + r.Height)) return false;
+            var x0 = MathF.Min(a.X, b.X);
+            var x1 = MathF.Max(a.X, b.X);
+            if (x1 <= (float)r.X || x0 >= (float)(r.X + r.Width)) return false;
+            return true;
+        }
+
+        return false;
+    }
+
+    // Overload to accept core RectF as well as Avalonia.Rect callers.
+    private static bool AxisAlignedSegmentIntersectsRect(Vector2 a, Vector2 b, Rect r)
+        => AxisAlignedSegmentIntersectsAvaloniaRect(a, b, r);
+
+    private static bool AxisAlignedSegmentIntersectsRect(Vector2 a, Vector2 b, RectF r)
+        => ArcRoutingGeometry.AxisAlignedSegmentIntersectsRect(a, b, r);
+
     private static void DrawLabelWithBackground(DrawingContext context, string text, Rect rect, IBrush brush, double fontSize)
     {
         var bg = new SolidColorBrush(Color.FromArgb(235, 255, 255, 255));
@@ -1623,7 +1737,8 @@ public sealed class DiagramView : Control
         var main = endOut - startOut;
         var mainIsHorizontal = MathF.Abs(main.X) >= MathF.Abs(main.Y);
         var laneShift = mainIsHorizontal ? new Vector2(0, laneOffset) : new Vector2(laneOffset, 0);
-        laneShift = ArcRoutingGeometry.ClampLaneShiftAgainstExit(start, startOut, end, endOut, laneShift);
+            // For demo, use inclined clamping to preserve sloped geometries.
+            laneShift = ArcRoutingGeometry.ClampLaneShiftAgainstExit(start, startOut, end, endOut, laneShift, useInclined: true);
 
         Vector2 mid;
         if (preferHorizontalFirst)
@@ -1689,11 +1804,6 @@ public sealed class DiagramView : Control
 
     private static RectF Expand(in RectF r, float margin)
         => new(r.X - margin, r.Y - margin, r.Width + 2 * margin, r.Height + 2 * margin);
-
-    private static bool AxisAlignedSegmentIntersectsRect(Vector2 a, Vector2 b, RectF r)
-    {
-        return ArcRoutingGeometry.AxisAlignedSegmentIntersectsRect(a, b, r);
-    }
 
     private static bool HasCollinearOverlap(List<Vector2> a, List<Vector2> b, float clearance)
     {

@@ -717,7 +717,57 @@ public sealed class GravityLayoutEngine
 
 		// If the first/last internal point sits almost on the straight segment to its neighbor and is
 		// very close to the endpoint, it becomes a tiny visible stub; drop it.
-		// ...existing code...
+		// Heuristics:
+		// - If the first internal point is axis-aligned from `start` and lies on the same axis
+		//   as the next point (or the end), and its distance from the `start` is not large (<= 2*portArcOffset),
+		//   then it's likely a perpendicular tail introduced by the port offset and can be removed.
+		// - Same logic applies symmetrically for the last internal point.
+
+		const float portArcOffset = 24f;
+		const float maxTailKeep = portArcOffset * 2f + 0.1f;
+		const float axisTol = 0.5f; // tolerance to consider axis-aligned
+
+		// Remove first tail if it is a small axis-aligned stub near start.
+		if (internalPoints.Count > 0)
+		{
+			var p0 = internalPoints[0];
+			var next = internalPoints.Count > 1 ? internalPoints[1] : end;
+			var d0 = p0 - start;
+			if ((MathF.Abs(d0.X) < axisTol && MathF.Abs(d0.Y) > axisTol) || (MathF.Abs(d0.Y) < axisTol && MathF.Abs(d0.X) > axisTol))
+			{
+				var dist = d0.Length();
+				// Check colinearity with next: the next point should share the same axis coordinate as p0
+				if (dist <= maxTailKeep)
+				{
+					var colinearWithNext = MathF.Abs(next.X - p0.X) < axisTol || MathF.Abs(next.Y - p0.Y) < axisTol;
+					if (colinearWithNext)
+					{
+						internalPoints.RemoveAt(0);
+					}
+				}
+			}
+		}
+
+		// Remove last tail if it is a small axis-aligned stub near end.
+		if (internalPoints.Count > 0)
+		{
+			var ln = internalPoints.Count;
+			var plast = internalPoints[ln - 1];
+			var prev = ln > 1 ? internalPoints[ln - 2] : start;
+			var d1 = plast - end;
+			if ((MathF.Abs(d1.X) < axisTol && MathF.Abs(d1.Y) > axisTol) || (MathF.Abs(d1.Y) < axisTol && MathF.Abs(d1.X) > axisTol))
+			{
+				var dist = d1.Length();
+				if (dist <= maxTailKeep)
+				{
+					var colinearWithPrev = MathF.Abs(prev.X - plast.X) < axisTol || MathF.Abs(prev.Y - plast.Y) < axisTol;
+					if (colinearWithPrev)
+					{
+						internalPoints.RemoveAt(ln - 1);
+					}
+				}
+			}
+		}
 	}
 
 	private static bool IsPointOnSegmentApprox(Vector2 a, Vector2 b, Vector2 p, float tol)
@@ -757,7 +807,11 @@ public sealed class GravityLayoutEngine
 
 	private static bool SegmentIntersectsRect(Vector2 a, Vector2 b, RectF r)
 	{
-		// Standard segment-AABB intersection (Liang–Barsky).
+		if (MathF.Abs(a.X - b.X) < 0.001f || MathF.Abs(a.Y - b.Y) < 0.001f)
+		{
+			return ArcRoutingGeometry.AxisAlignedSegmentIntersectsRect(a, b, r);
+		}
+
 		var dx = b.X - a.X;
 		var dy = b.Y - a.Y;
 		var t0 = 0f;
@@ -787,7 +841,17 @@ public sealed class GravityLayoutEngine
 		if (!Clip(dx, r.Right - a.X, ref t0, ref t1)) return false;
 		if (!Clip(-dy, a.Y - r.Top, ref t0, ref t1)) return false;
 		if (!Clip(dy, r.Bottom - a.Y, ref t0, ref t1)) return false;
-		return t1 >= t0;
+
+		if (t1 <= t0) return false;
+
+		var midT = (t0 + t1) * 0.5f;
+		var mid = new Vector2(a.X + dx * midT, a.Y + dy * midT);
+		return mid.X > r.Left && mid.X < r.Right && mid.Y > r.Top && mid.Y < r.Bottom;
+	}
+
+	private static bool ArcSegmentIntersectsRect(Vector2 a, Vector2 b, RectF r)
+	{
+		return SegmentIntersectsRect(a, b, r);
 	}
 
 	private static void RepairArcAgainstNodes(
@@ -825,7 +889,7 @@ public sealed class GravityLayoutEngine
 			{
 				if (n == fromNodeIndex || n == toNodeIndex) continue;
 				var r = Expand(nodes[n].Bounds, clearance);
-				if (SegmentIntersectsRect(a, b, r))
+				if (ArcSegmentIntersectsRect(a, b, r))
 				{
 					hit = true;
 					hitRect = r;

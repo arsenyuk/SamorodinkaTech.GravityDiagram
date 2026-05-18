@@ -9,6 +9,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SamorodinkaTech.GravityDiag
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SamorodinkaTech.GravityDiagram.Core.Tests", "SamorodinkaTech.GravityDiagram.Core.Tests\SamorodinkaTech.GravityDiagram.Core.Tests.csproj", "{77406E52-9752-4ECD-B9D0-9DB7E93AC4AE}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tools", "Tools", "{07C2787E-EAC7-C090-1BA3-A61EC2A24D84}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AnalyzeDump", "Tools\AnalyzeDump\AnalyzeDump.csproj", "{C57F328E-E54A-4160-89B3-90B62F4E8153}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,8 +59,23 @@ Global
 		{77406E52-9752-4ECD-B9D0-9DB7E93AC4AE}.Release|x64.Build.0 = Release|Any CPU
 		{77406E52-9752-4ECD-B9D0-9DB7E93AC4AE}.Release|x86.ActiveCfg = Release|Any CPU
 		{77406E52-9752-4ECD-B9D0-9DB7E93AC4AE}.Release|x86.Build.0 = Release|Any CPU
+		{C57F328E-E54A-4160-89B3-90B62F4E8153}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C57F328E-E54A-4160-89B3-90B62F4E8153}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C57F328E-E54A-4160-89B3-90B62F4E8153}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C57F328E-E54A-4160-89B3-90B62F4E8153}.Debug|x64.Build.0 = Debug|Any CPU
+		{C57F328E-E54A-4160-89B3-90B62F4E8153}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C57F328E-E54A-4160-89B3-90B62F4E8153}.Debug|x86.Build.0 = Debug|Any CPU
+		{C57F328E-E54A-4160-89B3-90B62F4E8153}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C57F328E-E54A-4160-89B3-90B62F4E8153}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C57F328E-E54A-4160-89B3-90B62F4E8153}.Release|x64.ActiveCfg = Release|Any CPU
+		{C57F328E-E54A-4160-89B3-90B62F4E8153}.Release|x64.Build.0 = Release|Any CPU
+		{C57F328E-E54A-4160-89B3-90B62F4E8153}.Release|x86.ActiveCfg = Release|Any CPU
+		{C57F328E-E54A-4160-89B3-90B62F4E8153}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{C57F328E-E54A-4160-89B3-90B62F4E8153} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 	EndGlobalSection
 EndGlobal

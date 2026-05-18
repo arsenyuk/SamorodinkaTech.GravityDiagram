@@ -70,8 +70,30 @@ public static class ArcRoutingGeometry
 	/// which would effectively reduce the perpendicular exit/enter distance (e.g. when a lane shift is collinear
 	/// with the port normal and negative).
 	/// </summary>
-	public static Vector2 ClampLaneShiftAgainstExit(Vector2 start, Vector2 startOut, Vector2 end, Vector2 endOut, Vector2 laneShift)
+	public static Vector2 ClampLaneShiftAgainstExit(Vector2 start, Vector2 startOut, Vector2 end, Vector2 endOut, Vector2 laneShift, bool useInclined = false)
 	{
+		if (useInclined)
+		{
+			static Vector2 ClampAgainstInclined(Vector2 outDir, Vector2 shift)
+			{
+				var len = outDir.Length();
+				if (len < 1e-6f) return shift;
+				var u = outDir / len;
+				var proj = Vector2.Dot(shift, u);
+				if (proj < 0f)
+				{
+					shift -= u * proj;
+				}
+				return shift;
+			}
+
+			var startOutDirI = startOut - start;
+			var endOutDirI = endOut - end;
+			laneShift = ClampAgainstInclined(startOutDirI, laneShift);
+			laneShift = ClampAgainstInclined(endOutDirI, laneShift);
+			return laneShift;
+		}
+
 		static Vector2 UnitAxis(Vector2 v)
 		{
 			if (MathF.Abs(v.X) >= MathF.Abs(v.Y))
