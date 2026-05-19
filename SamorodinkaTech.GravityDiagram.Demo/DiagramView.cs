@@ -830,7 +830,7 @@ public sealed class DiagramView : Control
             }
 
             // Avoid tiny "tails" close to port points (common when internal points merge).
-            TrimShortEndpointSegments(poly, minLen: 6f);
+            TrimShortEndpointSegments(poly, minLen: 6f, Diagram.Nodes, fromPort.Ref.NodeId, toPort.Ref.NodeId);
 
             // Diagnostic + on-the-fly repair: detect any segment that strictly intersects a node interior
             // and insert a simple orthogonal waypoint to detour around the node for demo visualization.
@@ -918,7 +918,7 @@ public sealed class DiagramView : Control
         }
     }
 
-    private static void TrimShortEndpointSegments(List<Vector2> poly, float minLen)
+    private static void TrimShortEndpointSegments(List<Vector2> poly, float minLen, IReadOnlyList<RectNode> nodes, DiagramId fromNodeId, DiagramId toNodeId)
     {
         if (poly.Count < 3) return;
         var minLenSq = minLen * minLen;
@@ -928,6 +928,9 @@ public sealed class DiagramView : Control
         {
             var d = poly[1] - poly[0];
             if (d.LengthSquared() >= minLenSq) break;
+            var candidate = poly[2];
+            if (WouldSegmentIntersectAnyNode(poly[0], candidate, nodes, fromNodeId, toNodeId))
+                break;
             poly.RemoveAt(1);
         }
 
@@ -937,8 +940,29 @@ public sealed class DiagramView : Control
             var last = poly.Count - 1;
             var d = poly[last] - poly[last - 1];
             if (d.LengthSquared() >= minLenSq) break;
+            var candidate = poly[last - 2];
+            if (WouldSegmentIntersectAnyNode(candidate, poly[last], nodes, fromNodeId, toNodeId))
+                break;
             poly.RemoveAt(last - 1);
         }
+    }
+
+    private static bool WouldSegmentIntersectAnyNode(Vector2 a, Vector2 b, IReadOnlyList<RectNode> nodes, DiagramId fromNodeId, DiagramId toNodeId)
+    {
+        if (MathF.Abs(a.X - b.X) > 0.001f && MathF.Abs(a.Y - b.Y) > 0.001f)
+        {
+            // We only expect orthogonal segments for routed arcs; preserve if non-axis-aligned.
+            return true;
+        }
+
+        foreach (var node in nodes)
+        {
+            if (node.Id == fromNodeId || node.Id == toNodeId) continue;
+            if (AxisAlignedSegmentIntersectsRect(a, b, node.Bounds))
+                return true;
+        }
+
+        return false;
     }
 
     private static void DrawArrowHead(DrawingContext context, IBrush fill, Pen outline, IReadOnlyList<Vector2>? poly)

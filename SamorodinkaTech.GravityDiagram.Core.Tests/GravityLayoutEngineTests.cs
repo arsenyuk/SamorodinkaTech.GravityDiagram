@@ -95,6 +95,56 @@ public sealed class GravityLayoutEngineTests
 	}
 
 	[Fact]
+	public void Step_RoutesAroundTargetOnLeft_WithoutCrossingInterior()
+	{
+		var diagram = new Diagram();
+		var n1 = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "A", Position = new Vector2(0, 0), Width = 100, Height = 60 });
+		var n2 = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "B", Position = new Vector2(-180, -40), Width = 100, Height = 60 });
+
+		n1.SetSideFlow(RectSide.Right, PortFlow.Outgoing);
+		n2.SetSideFlow(RectSide.Left, PortFlow.Incoming);
+
+		var p1 = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "out", Ref = new PortRef(n1.Id, RectSide.Right, 0.5f) });
+		var p2 = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "in", Ref = new PortRef(n2.Id, RectSide.Left, 0.5f) });
+		diagram.AddArc(new Arc { Id = DiagramId.New(), Text = "A->B", FromPortId = p1.Id, ToPortId = p2.Id });
+
+		var engine = new GravityLayoutEngine(new LayoutSettings
+		{
+			ArcPointAttractionK = 1f,
+			ArcPointMoveFactor = 1f,
+			ArcPointNodeRepulsionK = 0f,
+			ArcPointConstraintIterations = 6,
+			MaxArcInternalPoints = 8,
+			ConnectedArcAttractionK = 0f,
+			BackgroundPairGravity = 0f,
+			OverlapRepulsionK = 0f,
+			MinNodeSpacing = 0f,
+			UseHardMinSpacing = false,
+			Drag = 0f,
+			Softening = 0f,
+			MaxSpeed = 10000f,
+		});
+
+		for (var i = 0; i < 4; i++)
+		{
+			engine.Step(diagram, 0.001f);
+		}
+
+		var arc = Assert.Single(diagram.Arcs);
+		var points = new List<Vector2> { GravityLayoutEngine.GetPortWorldPosition(n1, p1.Ref) };
+		points.AddRange(arc.InternalPoints);
+		points.Add(GravityLayoutEngine.GetPortWorldPosition(n2, p2.Ref));
+
+		for (var i = 0; i + 1 < points.Count; i++)
+		{
+			var a = points[i];
+			var b = points[i + 1];
+			Assert.False(ArcRoutingGeometry.AxisAlignedSegmentIntersectsRect(a, b, n1.Bounds), $"Segment [{i}] intersects source node interior: {a} -> {b}");
+			Assert.False(ArcRoutingGeometry.AxisAlignedSegmentIntersectsRect(a, b, n2.Bounds), $"Segment [{i}] intersects target node interior: {a} -> {b}");
+		}
+	}
+
+	[Fact]
 	public void Step_CreatesThreeBendInternalPoints_WhenRightToTopTargetIsLeftOfSource()
 	{
 		var diagram = new Diagram();
