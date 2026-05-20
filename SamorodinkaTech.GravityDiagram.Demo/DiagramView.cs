@@ -14,7 +14,7 @@ namespace SamorodinkaTech.GravityDiagram.Demo;
 
 public sealed class DiagramView : Control
 {
-    private const float ArcOutDistance = 18f;
+    private const float ArcOutDistance = 0f;
     private const float ArcLaneSpacing = 14f;
     private const float ArcNodeClearance = 10f;
     private const float ArcOverlapClearance = 10f;
@@ -814,20 +814,21 @@ public sealed class DiagramView : Control
             var a = GravityLayoutEngine.GetPortWorldPosition(fromNode, fromPort.Ref);
             var b = GravityLayoutEngine.GetPortWorldPosition(toNode, toPort.Ref);
 
-            var poly = new List<Vector2>(2 + arc.InternalPoints.Count)
-            {
+            var laneOffset = _arcExtraLaneShiftById.TryGetValue(arc.Id, out var extraShift) ? extraShift : 0f;
+            var poly = RouteArcPolyline(
                 a,
-            };
-            for (var i = 0; i < arc.InternalPoints.Count; i++)
-                poly.Add(arc.InternalPoints[i]);
-            poly.Add(b);
-
-            // Remove adjacent duplicates (can happen after merges).
-            for (var i = poly.Count - 2; i >= 0; i--)
-            {
-                if (Vector2.DistanceSquared(poly[i], poly[i + 1]) < 0.0001f)
-                    poly.RemoveAt(i + 1);
-            }
+                fromPort.Ref.Side,
+                b,
+                toPort.Ref.Side,
+                laneOffset,
+                ArcOutDistance,
+                ArcNodeClearance,
+                Diagram.Nodes,
+                fromNode,
+                toNode,
+                lengthWeight: 1f,
+                bendWeight: 8f,
+                labelObstacles);
 
             // Avoid tiny "tails" close to port points (common when internal points merge).
             TrimShortEndpointSegments(poly, minLen: 6f, Diagram.Nodes, fromPort.Ref.NodeId, toPort.Ref.NodeId);
@@ -843,8 +844,10 @@ public sealed class DiagramView : Control
                 var repaired = false;
                 foreach (var node in Diagram.Nodes)
                 {
-                    // skip endpoints' own nodes
-                    if (node.Id == fromPort.Ref.NodeId || node.Id == toPort.Ref.NodeId)
+                    // Allow the very first segment to touch the source node and the very last segment to touch the target node.
+                    if (node.Id == fromPort.Ref.NodeId && si == 0)
+                        continue;
+                    if (node.Id == toPort.Ref.NodeId && si + 1 == poly.Count - 1)
                         continue;
                     if (!AxisAlignedSegmentIntersectsRect(pa, pb, node.Bounds))
                         continue;
@@ -865,16 +868,48 @@ public sealed class DiagramView : Control
                     if (dBottom < min) { min = dBottom; side = 3; }
 
                     var margin = ArcNodeClearance;
-                    Vector2 waypoint = side switch
+                    if (MathF.Abs(pa.X - pb.X) < 0.001f)
                     {
-                        0 => new Vector2(node.Bounds.Left - margin, Math.Clamp(mid.Y, node.Bounds.Top - margin, node.Bounds.Bottom + margin)),
-                        1 => new Vector2(node.Bounds.Right + margin, Math.Clamp(mid.Y, node.Bounds.Top - margin, node.Bounds.Bottom + margin)),
-                        2 => new Vector2(Math.Clamp(mid.X, node.Bounds.Left - margin, node.Bounds.Right + margin), node.Bounds.Top - margin),
-                        3 => new Vector2(Math.Clamp(mid.X, node.Bounds.Left - margin, node.Bounds.Right + margin), node.Bounds.Bottom + margin),
-                        _ => mid,
-                    };
+                        // Vertical segment detour around the node.
+                        var escapeX = side switch
+                        {
+                            0 => node.Bounds.Left - margin,
+                            1 => node.Bounds.Right + margin,
+                            _ => Math.Clamp(mid.X, node.Bounds.Left - margin, node.Bounds.Right + margin),
+                        };
+                        var detourA = new Vector2(escapeX, pa.Y);
+                        var detourB = new Vector2(escapeX, pb.Y);
+                        poly.Insert(si + 1, detourB);
+                        poly.Insert(si + 1, detourA);
+                    }
+                    else if (MathF.Abs(pa.Y - pb.Y) < 0.001f)
+                    {
+                        // Horizontal segment detour around the node.
+                        var escapeY = side switch
+                        {
+                            2 => node.Bounds.Top - margin,
+                            3 => node.Bounds.Bottom + margin,
+                            _ => Math.Clamp(mid.Y, node.Bounds.Top - margin, node.Bounds.Bottom + margin),
+                        };
+                        var detourA = new Vector2(pa.X, escapeY);
+                        var detourB = new Vector2(pb.X, escapeY);
+                        poly.Insert(si + 1, detourB);
+                        poly.Insert(si + 1, detourA);
+                    }
+                    else
+                    {
+                        Vector2 waypoint = side switch
+                        {
+                            0 => new Vector2(node.Bounds.Left - margin, Math.Clamp(mid.Y, node.Bounds.Top - margin, node.Bounds.Bottom + margin)),
+                            1 => new Vector2(node.Bounds.Right + margin, Math.Clamp(mid.Y, node.Bounds.Top - margin, node.Bounds.Bottom + margin)),
+                            2 => new Vector2(Math.Clamp(mid.X, node.Bounds.Left - margin, node.Bounds.Right + margin), node.Bounds.Top - margin),
+                            3 => new Vector2(Math.Clamp(mid.X, node.Bounds.Left - margin, node.Bounds.Right + margin), node.Bounds.Bottom + margin),
+                            _ => mid,
+                        };
 
-                    poly.Insert(si + 1, waypoint);
+                        poly.Insert(si + 1, waypoint);
+                    }
+
                     repaired = true;
                     break;
                 }
@@ -1065,9 +1100,17 @@ public sealed class DiagramView : Control
         var outA = from + ArcRoutingGeometry.SideDir(fromSide) * outDistance;
         var outB = to + ArcRoutingGeometry.SideDir(toSide) * outDistance;
 
-        var preferHorizontalFirst = fromSide is RectSide.Left or RectSide.Right;
-        var candidate = BuildOrthogonalCandidate(from, outA, outB, to, preferHorizontalFirst, laneOffset);
-        return candidate;    }
+        var candidateH = BuildOrthogonalCandidate(from, outA, outB, to, true, laneOffset);
+        var candidateV = BuildOrthogonalCandidate(from, outA, outB, to, false, laneOffset);
+
+        if (candidateH.SequenceEqual(candidateV))
+            return candidateH;
+
+        var scoreH = ScoreCandidate(candidateH, allNodes, fromNode, toNode, nodeClearance, lengthWeight, bendWeight, labelObstacles);
+        var scoreV = ScoreCandidate(candidateV, allNodes, fromNode, toNode, nodeClearance, lengthWeight, bendWeight, labelObstacles);
+
+        return scoreH <= scoreV ? candidateH : candidateV;
+    }
 
     private static float ScoreCandidate(
         List<Vector2> poly,
@@ -1783,13 +1826,28 @@ public sealed class DiagramView : Control
         var pts = new List<Vector2>(8)
         {
             start,
-            startOut,
-            startOut + laneShift,
-            mid + laneShift,
-            endOut + laneShift,
-            endOut,
-            end,
         };
+
+        if (Vector2.DistanceSquared(start, startOut) > 0.0001f)
+            pts.Add(startOut);
+
+        var shiftedStart = startOut + laneShift;
+        if (Vector2.DistanceSquared(pts[^1], shiftedStart) > 0.0001f)
+            pts.Add(shiftedStart);
+
+        var shiftedMid = mid + laneShift;
+        if (Vector2.DistanceSquared(pts[^1], shiftedMid) > 0.0001f)
+            pts.Add(shiftedMid);
+
+        var shiftedEnd = endOut + laneShift;
+        if (Vector2.DistanceSquared(pts[^1], shiftedEnd) > 0.0001f)
+            pts.Add(shiftedEnd);
+
+        if (Vector2.DistanceSquared(pts[^1], endOut) > 0.0001f)
+            pts.Add(endOut);
+
+        if (Vector2.DistanceSquared(pts[^1], end) > 0.0001f)
+            pts.Add(end);
 
         return SimplifyCollinear(pts);
     }
