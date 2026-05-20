@@ -371,6 +371,8 @@ public sealed class GravityLayoutEngine
 				internalPoints[i] += deltaStart * (1f - t) + deltaEnd * t;
 			}
 
+			RepairArcAgainstNodes(arc, nodes, ia, ib, startAfter, endAfter, GetArcPointClearance(), Math.Clamp(_settings.MaxArcInternalPoints, 0, 512));
+			EnsureOrthogonalInternalPoints(internalPoints, nodes);
 			CleanupEndpointTails(internalPoints, startAfter, endAfter);
 		}
 	}
@@ -663,8 +665,6 @@ public sealed class GravityLayoutEngine
 					var p = internalPoints[i];
 					for (var n = 0; n < nodes.Count; n++)
 					{
-						// Allow the arc to originate/terminate on its own nodes.
-						if (n == ia || n == ib) continue;
 						var r = Expand(nodes[n].Bounds, clearance);
 						if (!r.Contains(p)) continue;
 						any = true;
@@ -677,6 +677,21 @@ public sealed class GravityLayoutEngine
 
 			// Repair segments that cross clearance rectangles by inserting a waypoint.
 			RepairArcAgainstNodes(arc, nodes, ia, ib, start, end, clearance, maxInternal);
+
+			// Reinforce axis alignment after force-based movement.
+			EnsureOrthogonalInternalPoints(internalPoints, nodes);
+
+			// Repair again after orthogonalization to catch any new endpoint intersections.
+			RepairArcAgainstNodes(arc, nodes, ia, ib, start, end, clearance, maxInternal);
+
+			// Re-orthogonalize the path created by the repair insertion.
+			EnsureOrthogonalInternalPoints(internalPoints, nodes);
+
+			// Final repair pass in case orthogonalization introduced a new clearance violation.
+			RepairArcAgainstNodes(arc, nodes, ia, ib, start, end, clearance, maxInternal);
+
+			// Ensure the final route remains axis-aligned after the last repair.
+			EnsureOrthogonalInternalPoints(internalPoints, nodes);
 
 			// Merge adjacent internal points.
 			if (mergeDistance > 0f)
@@ -693,6 +708,9 @@ public sealed class GravityLayoutEngine
 					i++;
 				}
 			}
+
+			// Align the first and last internal points with the source and target port directions.
+			EnsureOrthogonalEndpoints(start, end, startSide, endSide, internalPoints);
 
 			// Remove redundant endpoint-adjacent points that create a visible "tail" near ports.
 			CleanupEndpointTails(internalPoints, start, end);
@@ -715,16 +733,23 @@ public sealed class GravityLayoutEngine
 				internalPoints.RemoveAt(i + 1);
 		}
 
+		// Don't remove endpoint offsets for the simplest minimal routed paths.
+		// These port offsets are required to keep the arc from collapsing to a straight line.
+		if (internalPoints.Count <= 2)
+		{
+			return;
+		}
+
 		// If the first/last internal point sits almost on the straight segment to its neighbor and is
-		// very close to the endpoint, it becomes a tiny visible stub; drop it.
+		// very short, it becomes a tiny visible stub; drop it.
 		// Heuristics:
 		// - If the first internal point is axis-aligned from `start` and lies on the same axis
-		//   as the next point (or the end), and its distance from the `start` is not large (<= 2*portArcOffset),
-		//   then it's likely a perpendicular tail introduced by the port offset and can be removed.
+		//   as the next point, and its distance from the `start` is small, then it's likely a
+		//   negligible tail introduced by routing refinement and can be removed.
 		// - Same logic applies symmetrically for the last internal point.
 
 		const float portArcOffset = 24f;
-		const float maxTailKeep = portArcOffset * 2f + 0.1f;
+		const float maxTailKeep = portArcOffset * 0.5f + 0.1f;
 		const float axisTol = 0.5f; // tolerance to consider axis-aligned
 
 		// Remove first tail if it is a small axis-aligned stub near start.
@@ -736,11 +761,13 @@ public sealed class GravityLayoutEngine
 			if ((MathF.Abs(d0.X) < axisTol && MathF.Abs(d0.Y) > axisTol) || (MathF.Abs(d0.Y) < axisTol && MathF.Abs(d0.X) > axisTol))
 			{
 				var dist = d0.Length();
-				// Check colinearity with next: the next point should share the same axis coordinate as p0
+				// Check colinearity with next: the next point should share the same axis coordinate as p0.
+				// Only remove the stub if start->next remains axis-aligned.
 				if (dist <= maxTailKeep)
 				{
 					var colinearWithNext = MathF.Abs(next.X - p0.X) < axisTol || MathF.Abs(next.Y - p0.Y) < axisTol;
-					if (colinearWithNext)
+					var directToNextAxisAligned = MathF.Abs(start.X - next.X) < axisTol || MathF.Abs(start.Y - next.Y) < axisTol;
+					if (colinearWithNext && directToNextAxisAligned)
 					{
 						internalPoints.RemoveAt(0);
 					}
@@ -761,7 +788,8 @@ public sealed class GravityLayoutEngine
 				if (dist <= maxTailKeep)
 				{
 					var colinearWithPrev = MathF.Abs(prev.X - plast.X) < axisTol || MathF.Abs(prev.Y - plast.Y) < axisTol;
-					if (colinearWithPrev)
+					var directToEndAxisAligned = MathF.Abs(prev.X - end.X) < axisTol || MathF.Abs(prev.Y - end.Y) < axisTol;
+					if (colinearWithPrev && directToEndAxisAligned)
 					{
 						internalPoints.RemoveAt(ln - 1);
 					}
@@ -887,14 +915,23 @@ public sealed class GravityLayoutEngine
 			RectF hitRect = default;
 			for (var n = 0; n < nodes.Count; n++)
 			{
-				if (n == fromNodeIndex || n == toNodeIndex) continue;
 				var r = Expand(nodes[n].Bounds, clearance);
-				if (ArcSegmentIntersectsRect(a, b, r))
+				if (!ArcSegmentIntersectsRect(a, b, r))
 				{
-					hit = true;
-					hitRect = r;
-					break;
+					continue;
 				}
+
+				// The first segment can begin inside the source node. That initial
+				// port-exit segment is allowed to touch the source node, but any later
+				// segment must still be repaired if it crosses its own node's interior.
+				if (n == fromNodeIndex && a == start)
+				{
+					continue;
+				}
+
+				hit = true;
+				hitRect = r;
+				break;
 			}
 
 			if (!hit)
@@ -930,6 +967,93 @@ public sealed class GravityLayoutEngine
 			inserted++;
 			// Re-check starting from previous segment.
 			if (i > -1) i--;
+		}
+	}
+
+	private static void EnsureOrthogonalInternalPoints(List<Vector2> internalPoints, ReadOnlyCollection<RectNode> nodes)
+	{
+		if (internalPoints.Count < 2) return;
+
+		static bool IsSegmentClear(Vector2 a, Vector2 b, ReadOnlyCollection<RectNode> nodes)
+		{
+			foreach (var node in nodes)
+			{
+				if (ArcRoutingGeometry.AxisAlignedSegmentIntersectsRect(a, b, node.Bounds))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
+		var corrected = new List<Vector2>(internalPoints.Count * 2);
+		corrected.Add(internalPoints[0]);
+
+		for (var i = 1; i < internalPoints.Count; i++)
+		{
+			var prev = corrected[^1];
+			var current = internalPoints[i];
+			if (MathF.Abs(prev.X - current.X) < 0.001f || MathF.Abs(prev.Y - current.Y) < 0.001f)
+			{
+				corrected.Add(current);
+				continue;
+			}
+
+			var cornerA = new Vector2(prev.X, current.Y);
+			var cornerB = new Vector2(current.X, prev.Y);
+			var useA = IsSegmentClear(prev, cornerA, nodes) && IsSegmentClear(cornerA, current, nodes);
+			var useB = IsSegmentClear(prev, cornerB, nodes) && IsSegmentClear(cornerB, current, nodes);
+
+			if (useA || !useB)
+			{
+				corrected.Add(cornerA);
+			}
+			else
+			{
+				corrected.Add(cornerB);
+			}
+
+			corrected.Add(current);
+		}
+
+		internalPoints.Clear();
+		internalPoints.AddRange(corrected);
+	}
+
+	private static void EnsureOrthogonalEndpoints(Vector2 start, Vector2 end, RectSide startSide, RectSide endSide, List<Vector2> internalPoints)
+	{
+		if (internalPoints.Count == 0) return;
+
+		var first = internalPoints[0];
+		if (startSide == RectSide.Left || startSide == RectSide.Right)
+		{
+			if (MathF.Abs(first.Y - start.Y) > 0.001f)
+			{
+				internalPoints.Insert(0, new Vector2(first.X, start.Y));
+			}
+		}
+		else
+		{
+			if (MathF.Abs(first.X - start.X) > 0.001f)
+			{
+				internalPoints.Insert(0, new Vector2(start.X, first.Y));
+			}
+		}
+
+		var last = internalPoints[^1];
+		if (endSide == RectSide.Left || endSide == RectSide.Right)
+		{
+			if (MathF.Abs(last.Y - end.Y) > 0.001f)
+			{
+				internalPoints.Add(new Vector2(last.X, end.Y));
+			}
+		}
+		else
+		{
+			if (MathF.Abs(last.X - end.X) > 0.001f)
+			{
+				internalPoints.Add(new Vector2(end.X, last.Y));
+			}
 		}
 	}
 
