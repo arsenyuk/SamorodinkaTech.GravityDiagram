@@ -815,21 +815,10 @@ public sealed class DiagramView : Control
             var a = GravityLayoutEngine.GetPortWorldPosition(fromNode, fromPort.Ref);
             var b = GravityLayoutEngine.GetPortWorldPosition(toNode, toPort.Ref);
 
-            var laneOffset = _arcExtraLaneShiftById.TryGetValue(arc.Id, out var extraShift) ? extraShift : 0f;
-            var poly = RouteArcPolyline(
-                a,
-                fromPort.Ref.Side,
-                b,
-                toPort.Ref.Side,
-                laneOffset,
-                ArcOutDistance,
-                ArcNodeClearance,
-                Diagram.Nodes,
-                fromNode,
-                toNode,
-                lengthWeight: 1f,
-                bendWeight: 8f,
-                labelObstacles);
+            // Use the engine's internal points for rendering.
+            var poly = new List<Vector2>(arc.InternalPoints.Count + 2) { a };
+            poly.AddRange(arc.InternalPoints);
+            poly.Add(b);
 
             // Avoid tiny "tails" close to port points (common when internal points merge).
             TrimShortEndpointSegments(poly, minLen: 6f, Diagram.Nodes, fromPort.Ref.NodeId, toPort.Ref.NodeId);
