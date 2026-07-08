@@ -651,9 +651,26 @@ public sealed class GravityLayoutEngine
 			}
 
 			// Apply movement (massless: position += force * factor * dt).
+			// Constrain each point to move only along the axis of the preceding segment
+			// to preserve the orthogonal polyline structure.
 			for (var i = 0; i < internalPoints.Count; i++)
 			{
-				internalPoints[i] += forces[i] * (moveFactor * dt);
+				var f = forces[i] * (moveFactor * dt);
+				// Determine axis from the segment leading into this point.
+				var prev = (i == 0) ? start : internalPoints[i - 1];
+				var dx = MathF.Abs(prev.X - internalPoints[i].X);
+				var dy = MathF.Abs(prev.Y - internalPoints[i].Y);
+				if (dx > dy)
+				{
+					// Previous segment is horizontal → this point moves vertically.
+					f = new Vector2(0f, f.Y);
+				}
+				else
+				{
+					// Previous segment is vertical → this point moves horizontally.
+					f = new Vector2(f.X, 0f);
+				}
+				internalPoints[i] += f;
 			}
 
 			// Hard constraints: keep internal points outside clearance rectangles.

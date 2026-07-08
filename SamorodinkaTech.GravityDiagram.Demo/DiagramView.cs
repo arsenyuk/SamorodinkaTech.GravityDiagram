@@ -798,6 +798,7 @@ public sealed class DiagramView : Control
     private IReadOnlyList<RoutedArc> ComputeRoutedArcs(IReadOnlyList<RectF> labelObstacles)
     {
         _arcExtraLaneShiftById.Clear();
+        _lastViolationMarkers.Clear();
 
         var nodesById = Diagram.Nodes.ToDictionary(n => n.Id, n => n);
         var portsById = Diagram.Ports.ToDictionary(p => p.Id, p => p);
