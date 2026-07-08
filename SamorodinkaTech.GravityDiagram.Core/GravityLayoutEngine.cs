@@ -61,9 +61,7 @@ public sealed class GravityLayoutEngine
 		if (MathF.Abs(startDir.X) > 0.001f)
 		{
 			var detourX = startOut.X + startDir.X * portArcOffset;
-			var approachY = endOut.Y + (MathF.Abs(endDir.Y) > 0.001f
-				? endDir.Y * portArcOffset
-				: (startOut.Y <= endOut.Y ? -portArcOffset : portArcOffset));
+			var approachY = endOut.Y + endDir.Y * portArcOffset;
 			internalPoints.Add(new Vector2(detourX, startOut.Y));
 			internalPoints.Add(new Vector2(detourX, approachY));
 			internalPoints.Add(new Vector2(endOut.X, approachY));
@@ -71,9 +69,7 @@ public sealed class GravityLayoutEngine
 		else
 		{
 			var detourY = startOut.Y + startDir.Y * portArcOffset;
-			var approachX = endOut.X + (MathF.Abs(endDir.X) > 0.001f
-				? endDir.X * portArcOffset
-				: (startOut.X <= endOut.X ? -portArcOffset : portArcOffset));
+			var approachX = endOut.X + endDir.X * portArcOffset;
 			internalPoints.Add(new Vector2(startOut.X, detourY));
 			internalPoints.Add(new Vector2(approachX, detourY));
 			internalPoints.Add(new Vector2(approachX, endOut.Y));
@@ -113,24 +109,23 @@ public sealed class GravityLayoutEngine
 	private readonly Dictionary<DiagramId, Vector2> _lastForcesByNodeId = new();
 	private readonly Dictionary<DiagramId, Vector2[]> _lastArcPointForcesByArcId = new();
 
-	private void NormalizeForcesByMaxMagnitude(Vector2[] total, Vector2[]? arcPointEndpoint = null)
+	private static void RemoveNetTranslationForce(Vector2[] total, Vector2[]? arcPointEndpoint = null)
 	{
 		if (total.Length == 0) return;
 
-		var maxLength = 0f;
+		var sum = Vector2.Zero;
 		for (var i = 0; i < total.Length; i++)
 		{
-			maxLength = MathF.Max(maxLength, total[i].Length());
+			sum += total[i];
 		}
-
-		var threshold = MathF.Max(0f, _settings.ForceNormalizationThreshold);
-		if (maxLength <= threshold) return;
+		var mean = sum / total.Length;
+		if (mean.LengthSquared() < 0.0000001f) return;
 
 		for (var i = 0; i < total.Length; i++)
 		{
-			total[i] /= maxLength;
+			total[i] -= mean;
 			if (arcPointEndpoint is not null)
-				arcPointEndpoint[i] /= maxLength;
+				arcPointEndpoint[i] -= mean;
 		}
 	}
 
@@ -177,9 +172,10 @@ public sealed class GravityLayoutEngine
 
 		var arcPreviews = ComputeForces(diagram, nodes, nodeIndexById, total, background, overlap, arcSprings, arcPointEndpoint);
 
-		// Arc internal points are massless and their reaction forces are not applied back to nodes.
-		// Normalize the force vectors relative to the largest magnitude so strong forces remain dominant.
-		NormalizeForcesByMaxMagnitude(total, arcPointEndpoint);
+		// Arc internal points are massless and their reaction forces are not applied back to nodes,
+		// which can introduce a non-zero net force and make the whole diagram drift.
+		// Remove the net translation component so the layout converges without global drifting.
+		RemoveNetTranslationForce(total, arcPointEndpoint);
 
 		// Clone nodes for a non-mutating prediction.
 		var predicted = new List<RectNode>(nodes.Count);
@@ -321,15 +317,15 @@ public sealed class GravityLayoutEngine
 
 		ComputeForces(diagram, nodes, nodeIndexById, forces, arcPointEndpoint: arcPointEndpoint);
 
-		// Normalize force magnitudes so large forces stay dominant and small noise does not drive the system.
-		NormalizeForcesByMaxMagnitude(forces, arcPointEndpoint);
+		// Prevent global drift (see PreviewStep comment).
+		RemoveNetTranslationForce(forces, arcPointEndpoint);
 
 		// Update arc internal points (massless points, no velocity).
 		// This step can apply additional reaction forces back to nodes (e.g. arc-point vs node repulsion),
 		// which may reintroduce a small non-zero net translation component.
 		_lastArcPointForcesByArcId.Clear();
 		StepArcInternalPoints(diagram, nodes, nodeIndexById, forces, dt);
-		NormalizeForcesByMaxMagnitude(forces);
+		RemoveNetTranslationForce(forces);
 
 		_lastForcesByNodeId.Clear();
 		for (var i = 0; i < nodes.Count; i++)
@@ -612,10 +608,6 @@ public sealed class GravityLayoutEngine
 				internalPoints.RemoveRange(maxInternal, internalPoints.Count - maxInternal);
 			// Убрана фиксация крайних точек по нормали
 
-			// IMMEDIATE REPAIR: Fix violations in the initial polyline before applying forces
-			RepairArcAgainstNodes(arc, nodes, ia, ib, start, end, clearance, maxInternal);
-			PushInternalPointsOutOfNodes(internalPoints, nodes, clearance);
-
 			var forces = new Vector2[internalPoints.Count];
 
 			Vector2 GetPoint(int index)
@@ -685,31 +677,21 @@ public sealed class GravityLayoutEngine
 
 			// Repair segments that cross clearance rectangles by inserting a waypoint.
 			RepairArcAgainstNodes(arc, nodes, ia, ib, start, end, clearance, maxInternal);
-			SimplifyInternalPoints(internalPoints);
-			PushInternalPointsOutOfNodes(internalPoints, nodes, clearance);
 
 			// Reinforce axis alignment after force-based movement.
 			EnsureOrthogonalInternalPoints(internalPoints, nodes);
-			SimplifyInternalPoints(internalPoints);
-			PushInternalPointsOutOfNodes(internalPoints, nodes, clearance);
 
 			// Repair again after orthogonalization to catch any new endpoint intersections.
 			RepairArcAgainstNodes(arc, nodes, ia, ib, start, end, clearance, maxInternal);
-			SimplifyInternalPoints(internalPoints);
-			PushInternalPointsOutOfNodes(internalPoints, nodes, clearance);
 
-			// Ensure the final route remains axis-aligned after the last repair.
+			// Re-orthogonalize the path created by the repair insertion.
 			EnsureOrthogonalInternalPoints(internalPoints, nodes);
-			SimplifyInternalPoints(internalPoints);
-			PushInternalPointsOutOfNodes(internalPoints, nodes, clearance);
 
 			// Final repair pass in case orthogonalization introduced a new clearance violation.
 			RepairArcAgainstNodes(arc, nodes, ia, ib, start, end, clearance, maxInternal);
-			SimplifyInternalPoints(internalPoints);
-			PushInternalPointsOutOfNodes(internalPoints, nodes, clearance);
+
+			// Ensure the final route remains axis-aligned after the last repair.
 			EnsureOrthogonalInternalPoints(internalPoints, nodes);
-			SimplifyInternalPoints(internalPoints);
-			PushInternalPointsOutOfNodes(internalPoints, nodes, clearance);
 
 			// Merge adjacent internal points.
 			if (mergeDistance > 0f)
@@ -914,9 +896,7 @@ public sealed class GravityLayoutEngine
 
 		// Iterate once over the chain and insert at most a few points.
 		var inserted = 0;
-		var maxInsert = arc.InternalPoints.Count >= maxInternal
-			? 16
-			: Math.Clamp(maxInternal - arc.InternalPoints.Count, 0, 16);
+		var maxInsert = Math.Clamp(maxInternal - arc.InternalPoints.Count, 0, 16);
 		if (maxInsert == 0) return;
 
 		Vector2 GetPoint(int idx)
@@ -941,7 +921,13 @@ public sealed class GravityLayoutEngine
 					continue;
 				}
 
-
+				// The first segment can begin inside the source node. That initial
+				// port-exit segment is allowed to touch the source node, but any later
+				// segment must still be repaired if it crosses its own node's interior.
+				if (n == fromNodeIndex && a == start)
+				{
+					continue;
+				}
 
 				hit = true;
 				hitRect = r;
@@ -954,102 +940,31 @@ public sealed class GravityLayoutEngine
 				continue;
 			}
 
-			static int CountIntersections(Vector2 a, Vector2 b, ReadOnlyCollection<RectNode> nodes)
-			{
-				var count = 0;
-				foreach (var node in nodes)
-				{
-					if (ArcRoutingGeometry.AxisAlignedSegmentIntersectsRect(a, b, node.Bounds))
-						count++;
-				}
-				return count;
-			}
-
 			var mid = (a + b) * 0.5f;
 			var dLeft = MathF.Abs(mid.X - hitRect.Left);
 			var dRight = MathF.Abs(hitRect.Right - mid.X);
 			var dTop = MathF.Abs(mid.Y - hitRect.Top);
 			var dBottom = MathF.Abs(hitRect.Bottom - mid.Y);
+			var side = 0;
+			var min = dLeft;
+			if (dRight < min) { min = dRight; side = 1; }
+			if (dTop < min) { min = dTop; side = 2; }
+			if (dBottom < min) { min = dBottom; side = 3; }
+
 			var margin = 1.0f;
+			var waypoint = side switch
+			{
+				0 => new Vector2(hitRect.Left - margin, Math.Clamp(mid.Y, hitRect.Top - margin, hitRect.Bottom + margin)),
+				1 => new Vector2(hitRect.Right + margin, Math.Clamp(mid.Y, hitRect.Top - margin, hitRect.Bottom + margin)),
+				2 => new Vector2(Math.Clamp(mid.X, hitRect.Left - margin, hitRect.Right + margin), hitRect.Top - margin),
+				3 => new Vector2(Math.Clamp(mid.X, hitRect.Left - margin, hitRect.Right + margin), hitRect.Bottom + margin),
+				_ => mid,
+			};
+
+			// Insert into internal points list: between i and i+1.
 			var insertAt = Math.Clamp(i + 1, 0, arc.InternalPoints.Count);
-
-			if (MathF.Abs(a.X - b.X) < 0.001f)
-			{
-				var leftX = hitRect.Left - margin;
-				var rightX = hitRect.Right + margin;
-				var candidateLeftA = new Vector2(leftX, a.Y);
-				var candidateLeftB = new Vector2(leftX, b.Y);
-				var candidateRightA = new Vector2(rightX, a.Y);
-				var candidateRightB = new Vector2(rightX, b.Y);
-
-				var leftCost = CountIntersections(a, candidateLeftA, nodes)
-					+ CountIntersections(candidateLeftA, candidateLeftB, nodes)
-					+ CountIntersections(candidateLeftB, b, nodes);
-				var rightCost = CountIntersections(a, candidateRightA, nodes)
-					+ CountIntersections(candidateRightA, candidateRightB, nodes)
-					+ CountIntersections(candidateRightB, b, nodes);
-
-				if (leftCost <= rightCost)
-				{
-					arc.InternalPoints.Insert(insertAt, candidateLeftB);
-					arc.InternalPoints.Insert(insertAt, candidateLeftA);
-				}
-				else
-				{
-					arc.InternalPoints.Insert(insertAt, candidateRightB);
-					arc.InternalPoints.Insert(insertAt, candidateRightA);
-				}
-				inserted += 2;
-			}
-			else if (MathF.Abs(a.Y - b.Y) < 0.001f)
-			{
-				var topY = hitRect.Top - margin;
-				var bottomY = hitRect.Bottom + margin;
-				var candidateTopA = new Vector2(a.X, topY);
-				var candidateTopB = new Vector2(b.X, topY);
-				var candidateBottomA = new Vector2(a.X, bottomY);
-				var candidateBottomB = new Vector2(b.X, bottomY);
-
-				var topCost = CountIntersections(a, candidateTopA, nodes)
-					+ CountIntersections(candidateTopA, candidateTopB, nodes)
-					+ CountIntersections(candidateTopB, b, nodes);
-				var bottomCost = CountIntersections(a, candidateBottomA, nodes)
-					+ CountIntersections(candidateBottomA, candidateBottomB, nodes)
-					+ CountIntersections(candidateBottomB, b, nodes);
-
-				if (topCost <= bottomCost)
-				{
-					arc.InternalPoints.Insert(insertAt, candidateTopB);
-					arc.InternalPoints.Insert(insertAt, candidateTopA);
-				}
-				else
-				{
-					arc.InternalPoints.Insert(insertAt, candidateBottomB);
-					arc.InternalPoints.Insert(insertAt, candidateBottomA);
-				}
-				inserted += 2;
-			}
-			else
-			{
-				var side = 0;
-				var min = dLeft;
-				if (dRight < min) { min = dRight; side = 1; }
-				if (dTop < min) { min = dTop; side = 2; }
-				if (dBottom < min) { min = dBottom; side = 3; }
-
-				var waypoint = side switch
-				{
-					0 => new Vector2(hitRect.Left - margin, Math.Clamp(mid.Y, hitRect.Top - margin, hitRect.Bottom + margin)),
-					1 => new Vector2(hitRect.Right + margin, Math.Clamp(mid.Y, hitRect.Top - margin, hitRect.Bottom + margin)),
-					2 => new Vector2(Math.Clamp(mid.X, hitRect.Left - margin, hitRect.Right + margin), hitRect.Top - margin),
-					3 => new Vector2(Math.Clamp(mid.X, hitRect.Left - margin, hitRect.Right + margin), hitRect.Bottom + margin),
-					_ => mid,
-				};
-
-				arc.InternalPoints.Insert(insertAt, waypoint);
-				inserted++;
-			}
-
+			arc.InternalPoints.Insert(insertAt, waypoint);
+			inserted++;
 			// Re-check starting from previous segment.
 			if (i > -1) i--;
 		}
@@ -1074,19 +989,6 @@ public sealed class GravityLayoutEngine
 		var corrected = new List<Vector2>(internalPoints.Count * 2);
 		corrected.Add(internalPoints[0]);
 
-		static int BlockedSegmentCount(Vector2 a, Vector2 b, ReadOnlyCollection<RectNode> nodes)
-		{
-			var count = 0;
-			foreach (var node in nodes)
-			{
-				if (ArcRoutingGeometry.AxisAlignedSegmentIntersectsRect(a, b, node.Bounds))
-				{
-					count++;
-				}
-			}
-			return count;
-		}
-
 		for (var i = 1; i < internalPoints.Count; i++)
 		{
 			var prev = corrected[^1];
@@ -1102,15 +1004,13 @@ public sealed class GravityLayoutEngine
 			var useA = IsSegmentClear(prev, cornerA, nodes) && IsSegmentClear(cornerA, current, nodes);
 			var useB = IsSegmentClear(prev, cornerB, nodes) && IsSegmentClear(cornerB, current, nodes);
 
-			if (useA || useB)
+			if (useA || !useB)
 			{
-				corrected.Add(useA ? cornerA : cornerB);
+				corrected.Add(cornerA);
 			}
 			else
 			{
-				var blockedA = BlockedSegmentCount(prev, cornerA, nodes) + BlockedSegmentCount(cornerA, current, nodes);
-				var blockedB = BlockedSegmentCount(prev, cornerB, nodes) + BlockedSegmentCount(cornerB, current, nodes);
-				corrected.Add(blockedA <= blockedB ? cornerA : cornerB);
+				corrected.Add(cornerB);
 			}
 
 			corrected.Add(current);
@@ -1157,80 +1057,10 @@ public sealed class GravityLayoutEngine
 		}
 	}
 
-	private static void SimplifyInternalPoints(List<Vector2> internalPoints)
-	{
-		if (internalPoints.Count < 2) return;
-
-		const float tolerance = 0.5f;
-		const float toleranceSq = tolerance * tolerance;
-
-		for (var i = internalPoints.Count - 2; i >= 0; i--)
-		{
-			if (Vector2.DistanceSquared(internalPoints[i], internalPoints[i + 1]) <= toleranceSq)
-			{
-				internalPoints.RemoveAt(i + 1);
-			}
-		}
-
-		var j = 0;
-		while (j + 2 < internalPoints.Count)
-		{
-			var a = internalPoints[j];
-			var b = internalPoints[j + 1];
-			var c = internalPoints[j + 2];
-
-			var colinearX = MathF.Abs(a.X - b.X) < 0.001f && MathF.Abs(b.X - c.X) < 0.001f;
-			var colinearY = MathF.Abs(a.Y - b.Y) < 0.001f && MathF.Abs(b.Y - c.Y) < 0.001f;
-
-			if (colinearX)
-			{
-				if ((b.Y >= MathF.Min(a.Y, c.Y) - tolerance && b.Y <= MathF.Max(a.Y, c.Y) + tolerance))
-				{
-					internalPoints.RemoveAt(j + 1);
-					continue;
-				}
-			}
-			else if (colinearY)
-			{
-				if ((b.X >= MathF.Min(a.X, c.X) - tolerance && b.X <= MathF.Max(a.X, c.X) + tolerance))
-				{
-					internalPoints.RemoveAt(j + 1);
-					continue;
-				}
-			}
-
-			if (Vector2.DistanceSquared(a, c) <= toleranceSq)
-			{
-				internalPoints.RemoveAt(j + 1);
-				continue;
-			}
-
-			j++;
-		}
-	}
-
-	private static void PushInternalPointsOutOfNodes(List<Vector2> internalPoints, ReadOnlyCollection<RectNode> nodes, float clearance)
-	{
-		if (internalPoints.Count == 0) return;
-	
-		const float epsilon = 0.001f;
-		for (var i = 0; i < internalPoints.Count; i++)
-		{
-			var p = internalPoints[i];
-			for (var n = 0; n < nodes.Count; n++)
-			{
-				var r = Expand(nodes[n].Bounds, clearance);
-				if (!r.Contains(p)) continue;
-				p = PushPointOutOfRect(p, r, epsilon);
-			}
-			internalPoints[i] = p;
-		}
-	}
-
 	private void ApplyHardMinSpacing(ReadOnlyCollection<RectNode> nodes)
 	{
 		if (!_settings.UseHardMinSpacing) return;
-		var spacing = Math.Max(0f, _settings.MinNodeSpacing);
+		var spacing = 0f;
 		if (spacing <= 0f) return;
 
 		var iterations = Math.Clamp(_settings.HardMinSpacingIterations, 0, 50);
