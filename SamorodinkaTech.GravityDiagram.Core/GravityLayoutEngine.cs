@@ -1134,7 +1134,7 @@ public sealed class GravityLayoutEngine
 	private void ApplyHardMinSpacing(ReadOnlyCollection<RectNode> nodes)
 	{
 		if (!_settings.UseHardMinSpacing) return;
-		var spacing = 0f;
+		var spacing = Math.Max(0f, _settings.MinNodeSpacing);
 		if (spacing <= 0f) return;
 
 		var iterations = Math.Clamp(_settings.HardMinSpacingIterations, 0, 50);
