@@ -760,6 +760,29 @@ public sealed class GravityLayoutEngine
 				}
 			}
 
+			// Remove zigzag at endpoints: if the last internal point creates a direction reversal
+			// with the port (i.e., the arc goes away from the port then back towards it).
+			if (internalPoints.Count >= 2)
+			{
+				var last = internalPoints[^1];
+				var secondLast = internalPoints[^2];
+				// Check for direction reversal: secondLast→last goes one way, last→end goes the opposite way.
+				var dx1 = last.X - secondLast.X;
+				var dx2 = end.X - last.X;
+				var dy1 = last.Y - secondLast.Y;
+				var dy2 = end.Y - last.Y;
+				// Horizontal reversal: both segments are horizontal but go in opposite X directions.
+				if (MathF.Abs(dy1) < 0.001f && MathF.Abs(dy2) < 0.001f && dx1 * dx2 < -0.0001f)
+				{
+					internalPoints.RemoveAt(internalPoints.Count - 1);
+				}
+				// Vertical reversal: both segments are vertical but go in opposite Y directions.
+				else if (MathF.Abs(dx1) < 0.001f && MathF.Abs(dx2) < 0.001f && dy1 * dy2 < -0.0001f)
+				{
+					internalPoints.RemoveAt(internalPoints.Count - 1);
+				}
+			}
+
 			// Align the first and last internal points with the source and target port directions.
 			EnsureOrthogonalEndpoints(start, end, startSide, endSide, internalPoints);
 
