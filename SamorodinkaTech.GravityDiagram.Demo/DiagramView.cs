@@ -837,7 +837,9 @@ public sealed class DiagramView : Control
             // Diagnostic + on-the-fly repair: detect any segment that strictly intersects a node interior
             // and insert a simple orthogonal waypoint to detour around the node for demo visualization.
             var safetyLoop = 0;
-            for (var si = 0; si + 1 < poly.Count && safetyLoop < 64; si++)
+            var totalInserts = 0;
+            const int maxTotalInserts = 32;
+            for (var si = 0; si + 1 < poly.Count && safetyLoop < 64 && totalInserts < maxTotalInserts; si++)
             {
                 safetyLoop++;
                 var pa = poly[si];
@@ -914,6 +916,7 @@ public sealed class DiagramView : Control
                     }
 
                     repaired = true;
+                    totalInserts++;
                     break;
                 }
                 if (repaired)
