@@ -740,6 +740,26 @@ public sealed class GravityLayoutEngine
 				}
 			}
 
+			// Final snap: ensure all points are exactly axis-aligned with their neighbors.
+			// After force movement and merge, small floating-point drift can create near-diagonal segments.
+			for (var i = 0; i < internalPoints.Count; i++)
+			{
+				// Determine axis from the segment leading into this point.
+				Vector2 prev = (i == 0) ? start : internalPoints[i - 1];
+				var dx = MathF.Abs(prev.X - internalPoints[i].X);
+				var dy = MathF.Abs(prev.Y - internalPoints[i].Y);
+				if (dx > dy)
+				{
+					// Horizontal segment → snap Y to match previous point.
+					internalPoints[i] = new Vector2(internalPoints[i].X, prev.Y);
+				}
+				else
+				{
+					// Vertical segment → snap X to match previous point.
+					internalPoints[i] = new Vector2(prev.X, internalPoints[i].Y);
+				}
+			}
+
 			// Align the first and last internal points with the source and target port directions.
 			EnsureOrthogonalEndpoints(start, end, startSide, endSide, internalPoints);
 
