@@ -710,19 +710,33 @@ public sealed class GravityLayoutEngine
 			// Ensure the final route remains axis-aligned after the last repair.
 			EnsureOrthogonalInternalPoints(internalPoints, nodes);
 
-			// Merge adjacent internal points.
+			// Merge adjacent internal points: remove collinear points and nearby points.
 			if (mergeDistance > 0f)
 			{
-				var i = 0;
-				while (i + 1 < internalPoints.Count)
+				// First pass: remove collinear points (three consecutive points on the same line).
+				for (var i = internalPoints.Count - 2; i >= 1; i--)
 				{
-					if (Vector2.DistanceSquared(internalPoints[i], internalPoints[i + 1]) <= mergeDistance2)
+					var prev = internalPoints[i - 1];
+					var curr = internalPoints[i];
+					var next = internalPoints[i + 1];
+					var sameX = MathF.Abs(prev.X - curr.X) < 0.001f && MathF.Abs(curr.X - next.X) < 0.001f;
+					var sameY = MathF.Abs(prev.Y - curr.Y) < 0.001f && MathF.Abs(curr.Y - next.Y) < 0.001f;
+					if (sameX || sameY)
 					{
-						internalPoints[i] = (internalPoints[i] + internalPoints[i + 1]) * 0.5f;
-						internalPoints.RemoveAt(i + 1);
+						internalPoints.RemoveAt(i);
+					}
+				}
+				// Second pass: merge very close adjacent points.
+				var i2 = 0;
+				while (i2 + 1 < internalPoints.Count)
+				{
+					if (Vector2.DistanceSquared(internalPoints[i2], internalPoints[i2 + 1]) <= mergeDistance2)
+					{
+						internalPoints[i2] = (internalPoints[i2] + internalPoints[i2 + 1]) * 0.5f;
+						internalPoints.RemoveAt(i2 + 1);
 						continue;
 					}
-					i++;
+					i2++;
 				}
 			}
 

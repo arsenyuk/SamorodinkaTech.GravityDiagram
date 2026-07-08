@@ -853,8 +853,10 @@ public sealed class DiagramView : Control
                     if (!AxisAlignedSegmentIntersectsRect(pa, pb, node.Bounds))
                         continue;
 
-                    Console.WriteLine($"[diag] Arc {arc.Id} segment {si} intersects node {node.Id}");
-                    _lastViolationMarkers.Add((pa, pb, node.Id, arc.Id));
+                    if (_lastViolationMarkers.Count < 10)
+                        Console.WriteLine($"[diag] Arc {arc.Id} segment {si} intersects node {node.Id}");
+                    if (_lastViolationMarkers.Count < 10)
+                        _lastViolationMarkers.Add((pa, pb, node.Id, arc.Id));
 
                     // Insert a waypoint that detours outside node.Bounds by ArcNodeClearance.
                     var mid = (pa + pb) * 0.5f;
