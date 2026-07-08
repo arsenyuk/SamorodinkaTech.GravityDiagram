@@ -1,38 +1,31 @@
 # SamorodinkaTech.GravityDiagram
 
-A small .NET (net9.0) library + Avalonia demo for laying out rectangular node diagrams using a simple “gravity + springs + repulsion” simulation.
+A .NET 9.0 library for automatic layout of rectangular node diagrams using physics simulation.
 
-## What’s inside
+## Key Features
 
-- **Core** (`SamorodinkaTech.GravityDiagram.Core`):
-  - Diagram model (nodes, ports, arcs)
-  - Physics layout engine with:
-    - pair attraction (background gravity)
-    - connected-node attraction along arcs
-    - overlap/min-spacing repulsion
-    - optional hard constraint solver for `MinNodeSpacing`
-- **Demo** (`SamorodinkaTech.GravityDiagram.Demo`):
-  - Avalonia renderer and interactive settings panel
-  - Orthogonal (polyline) arc routing with basic overlap avoidance
-  - Debug overlays (min-spacing bounds + force vectors)
-- **Tests** (`SamorodinkaTech.GravityDiagram.Core.Tests`): xUnit tests for core behavior.
+- **Physics-based layout** — gravity, springs, and repulsion forces position nodes automatically
+- **Orthogonal arc routing** — arcs are rendered as clean horizontal/vertical polylines
+- **Real-time interaction** — adjust physics parameters and see results instantly
+- **Zero dependencies** — core library has no NuGet packages
+- **Cross-platform** — runs on Windows, macOS, and Linux via Avalonia
 
-## Build
+## Quick Start
 
 ```bash
+# Build
 dotnet build -v minimal
+
+# Run interactive demo
+dotnet run --project SamorodinkaTech.GravityDiagram.Demo
+
+# Run tests
+dotnet test SamorodinkaTech.GravityDiagram.Core.Tests
 ```
 
-## Run demo
+## Architecture
 
-```bash
-dotnet run --project "SamorodinkaTech.GravityDiagram.Demo/SamorodinkaTech.GravityDiagram.Demo.csproj"
-```
-
-## Notes
-
-- Layout settings can be changed live in the demo’s left panel.
-- If you disable the hard min-spacing solver, use the **soft overlap boost** slider to make intersecting rectangles separate faster.
+See [architecture.md](architecture.md) for detailed documentation on the physics engine, domain model, and project structure.
 
 ## License
 

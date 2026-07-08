@@ -5,6 +5,8 @@ using System.Numerics;
 using System.Text.Json;
 using SamorodinkaTech.GravityDiagram.Core;
 
+// Re-use the unified DumpRoot model from Core
+
 class Program
 {
     static int Main(string[] args)
@@ -171,28 +173,13 @@ class Program
             SoftOverlapBoostWhenHardDisabled = s.SoftOverlapBoostWhenHardDisabled,
             Drag = s.Drag,
             MaxSpeed = s.MaxSpeed,
+            ArcPointAttractionK = s.ArcPointAttractionK,
+            ArcPointMoveFactor = s.ArcPointMoveFactor,
+            ArcPointNodeRepulsionK = s.ArcPointNodeRepulsionK,
+            ArcPointMergeDistance = s.ArcPointMergeDistance,
+            ArcPointConstraintIterations = s.ArcPointConstraintIterations,
+            ArcPointExtraClearance = s.ArcPointExtraClearance,
+            MaxArcInternalPoints = s.MaxArcInternalPoints,
         };
     }
-
-    private sealed record DumpRoot(float Dt, DumpSettings Settings, DumpDiagram Diagram);
-    private sealed record DumpSettings(
-        float NodeMass,
-        float Softening,
-        float BackgroundPairGravity,
-        float EdgeSpringRestLength,
-        float ConnectedArcAttractionK,
-        bool MinimizeArcLength,
-        float MinNodeSpacing,
-        bool UseHardMinSpacing,
-        int HardMinSpacingIterations,
-        float HardMinSpacingSlop,
-        float OverlapRepulsionK,
-        float SoftOverlapBoostWhenHardDisabled,
-        float Drag,
-        float MaxSpeed);
-    private sealed record DumpDiagram(DumpNode[] Nodes, DumpPort[] Ports, DumpArc[] Arcs);
-    private sealed record DumpNode(string Id, string? Text, DumpVec2 Position, DumpVec2 Velocity, float Width, float Height);
-    private sealed record DumpPort(string Id, string? Text, string NodeId, string Side, float Offset);
-    private sealed record DumpArc(string Id, string? Text, string FromPortId, string ToPortId);
-    private sealed record DumpVec2(float X, float Y);
 }

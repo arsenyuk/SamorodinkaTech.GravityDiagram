@@ -1,0 +1,608 @@
+{
+  "schemaVersion": 5,
+  "createdAtUtc": "2026-06-17T19:01:33.241333+00:00",
+  "dt": 0.016666668,
+  "isMovingNow": false,
+  "willMoveNextStep": false,
+  "maxSpeed": 0,
+  "maxPredictedDelta": 0,
+  "maxPredictedDeltaIfNoForces": 0,
+  "settings": {
+    "nodeMass": 9.950541,
+    "softening": 50,
+    "backgroundPairGravity": 0.039882813,
+    "edgeSpringRestLength": 401.26953,
+    "connectedArcAttractionK": 2.064375,
+    "minimizeArcLength": false,
+    "useHardMinSpacing": false,
+    "hardMinSpacingIterations": 10,
+    "hardMinSpacingSlop": 0.5,
+    "overlapRepulsionK": 200,
+    "softOverlapBoostWhenHardDisabled": 3.6114843,
+    "drag": 2.4,
+    "maxSpeed": 2400,
+    "arcPointAttractionK": 6,
+    "arcPointMoveFactor": 0.035,
+    "arcPointNodeRepulsionK": 1200,
+    "arcPointMergeDistance": 2,
+    "arcPointConstraintIterations": 6,
+    "arcPointExtraClearance": 0,
+    "maxArcInternalPoints": 64
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "8bc51675d25841ee81bb8d8d111dba26",
+        "text": "1",
+        "position": {
+          "x": 349.20825,
+          "y": 301.4822
+        },
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "width": 170,
+        "height": 80,
+        "mass": 9.950541,
+        "bounds": {
+          "x": 264.20825,
+          "y": 261.4822,
+          "width": 170,
+          "height": 80
+        }
+      },
+      {
+        "id": "dd1855e74c464d6db8422af4e3bfbcab",
+        "text": "2",
+        "position": {
+          "x": 50.653896,
+          "y": 342.33478
+        },
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "width": 170,
+        "height": 80,
+        "mass": 9.950541,
+        "bounds": {
+          "x": -34.346104,
+          "y": 302.33478,
+          "width": 170,
+          "height": 80
+        }
+      },
+      {
+        "id": "9841d7a334174d04a44159f106decd27",
+        "text": "3",
+        "position": {
+          "x": 50.60236,
+          "y": 261.34164
+        },
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "width": 170,
+        "height": 80,
+        "mass": 9.950541,
+        "bounds": {
+          "x": -34.39764,
+          "y": 221.34164,
+          "width": 170,
+          "height": 80
+        }
+      }
+    ],
+    "ports": [
+      {
+        "id": "2a656edd600e487d9ad01cea2693b32a",
+        "text": "out",
+        "nodeId": "8bc51675d25841ee81bb8d8d111dba26",
+        "side": "Right",
+        "offset": 0.5,
+        "clampedOffset": 0.5,
+        "worldPosition": {
+          "x": 434.20825,
+          "y": 301.4822
+        }
+      },
+      {
+        "id": "f7c11628e5bd429d818f0bf9f7bbbe0f",
+        "text": "in",
+        "nodeId": "dd1855e74c464d6db8422af4e3bfbcab",
+        "side": "Left",
+        "offset": 0.5,
+        "clampedOffset": 0.5,
+        "worldPosition": {
+          "x": -34.346104,
+          "y": 342.33478
+        }
+      },
+      {
+        "id": "95aff40c797b4e5b9750479cd5294b12",
+        "text": "in",
+        "nodeId": "9841d7a334174d04a44159f106decd27",
+        "side": "Left",
+        "offset": 0.5,
+        "clampedOffset": 0.5,
+        "worldPosition": {
+          "x": -34.39764,
+          "y": 261.34164
+        }
+      }
+    ],
+    "arcs": [
+      {
+        "id": "79c59bc1ba63492583557858b940b635",
+        "text": "1\u21922",
+        "fromPortId": "2a656edd600e487d9ad01cea2693b32a",
+        "toPortId": "f7c11628e5bd429d818f0bf9f7bbbe0f",
+        "internalPoints": [
+          {
+            "x": 458.20825,
+            "y": 301.4822
+          },
+          {
+            "x": 482.12427,
+            "y": 301.54117
+          },
+          {
+            "x": 481.22058,
+            "y": 318.27585
+          },
+          {
+            "x": 480.3169,
+            "y": 330.37903
+          },
+          {
+            "x": 435.20825,
+            "y": 330.37903
+          },
+          {
+            "x": 435.20825,
+            "y": 342.4822
+          },
+          {
+            "x": 263.20825,
+            "y": 342.4822
+          },
+          {
+            "x": 263.20825,
+            "y": 301.3348
+          },
+          {
+            "x": 136.6539,
+            "y": 301.3348
+          },
+          {
+            "x": 136.6539,
+            "y": 220.34161
+          },
+          {
+            "x": -35.397644,
+            "y": 220.34161
+          },
+          {
+            "x": -35.397644,
+            "y": 302.3338
+          },
+          {
+            "x": 33.98955,
+            "y": 301.8382
+          },
+          {
+            "x": 103.37675,
+            "y": 301.34262
+          },
+          {
+            "x": -56.454754,
+            "y": 301.34262
+          },
+          {
+            "x": -57.358444,
+            "y": 342.25082
+          },
+          {
+            "x": -57.358444,
+            "y": 342.3348
+          }
+        ],
+        "internalPointForces": [
+          {
+            "x": -0.5039215,
+            "y": 0.35375974
+          },
+          {
+            "x": -148.9182,
+            "y": 100.05432
+          },
+          {
+            "x": 4.7683716E-07,
+            "y": -27.789001
+          },
+          {
+            "x": -265.22974,
+            "y": -72.61908
+          },
+          {
+            "x": 270.65186,
+            "y": 72.61908
+          },
+          {
+            "x": -1032,
+            "y": -72.61908
+          },
+          {
+            "x": 1032,
+            "y": -246.8844
+          },
+          {
+            "x": -759.3261,
+            "y": 246.8844
+          },
+          {
+            "x": 759.3261,
+            "y": -485.95917
+          },
+          {
+            "x": -1032.3093,
+            "y": 485.95917
+          },
+          {
+            "x": 1032.3093,
+            "y": 491.95312
+          },
+          {
+            "x": 416.32315,
+            "y": -494.92676
+          },
+          {
+            "x": 0,
+            "y": 0.00018310547
+          },
+          {
+            "x": -1375.3121,
+            "y": 2.9734497
+          },
+          {
+            "x": 953.5669,
+            "y": 245.44922
+          },
+          {
+            "x": 5.422142,
+            "y": -244.94531
+          },
+          {
+            "x": 138.07404,
+            "y": -0.50408936
+          }
+        ]
+      },
+      {
+        "id": "2ba16dcd13a447dd8af644a41bb76694",
+        "text": "1\u21923",
+        "fromPortId": "2a656edd600e487d9ad01cea2693b32a",
+        "toPortId": "95aff40c797b4e5b9750479cd5294b12",
+        "internalPoints": [
+          {
+            "x": 458.20825,
+            "y": 301.4822
+          },
+          {
+            "x": 482.12427,
+            "y": 301.42572
+          },
+          {
+            "x": 481.2205,
+            "y": 285.3981
+          },
+          {
+            "x": 480.3167,
+            "y": 272.94016
+          },
+          {
+            "x": 435.20825,
+            "y": 272.94016
+          },
+          {
+            "x": 435.20825,
+            "y": 260.4822
+          },
+          {
+            "x": 263.20825,
+            "y": 260.4822
+          },
+          {
+            "x": 263.20825,
+            "y": 301.3348
+          },
+          {
+            "x": 136.6539,
+            "y": 301.3348
+          },
+          {
+            "x": 136.6539,
+            "y": 220.34161
+          },
+          {
+            "x": -35.397644,
+            "y": 220.34161
+          },
+          {
+            "x": -35.397644,
+            "y": 302.3338
+          },
+          {
+            "x": 120.00249,
+            "y": 302.3338
+          },
+          {
+            "x": -56.50611,
+            "y": 302.3338
+          },
+          {
+            "x": -57.40989,
+            "y": 261.4256
+          },
+          {
+            "x": -57.40989,
+            "y": 261.3416
+          }
+        ],
+        "internalPointForces": [
+          {
+            "x": -0.50390625,
+            "y": -0.33892822
+          },
+          {
+            "x": -148.91876,
+            "y": -95.82678
+          },
+          {
+            "x": 4.7683716E-07,
+            "y": 21.418022
+          },
+          {
+            "x": -265.2281,
+            "y": 74.74769
+          },
+          {
+            "x": 270.65076,
+            "y": -74.74768
+          },
+          {
+            "x": -1032,
+            "y": 74.74768
+          },
+          {
+            "x": 1032,
+            "y": 245.1156
+          },
+          {
+            "x": -759.3261,
+            "y": -245.1156
+          },
+          {
+            "x": 759.3261,
+            "y": -485.95917
+          },
+          {
+            "x": -1032.3093,
+            "y": 485.95917
+          },
+          {
+            "x": 1032.3093,
+            "y": 491.95312
+          },
+          {
+            "x": 932.40076,
+            "y": -491.95312
+          },
+          {
+            "x": -1991.4524,
+            "y": 0
+          },
+          {
+            "x": 1053.6289,
+            "y": -245.44923
+          },
+          {
+            "x": 5.4226685,
+            "y": 244.94533
+          },
+          {
+            "x": 138.07349,
+            "y": 0.50408936
+          }
+        ]
+      }
+    ]
+  },
+  "forces": [
+    {
+      "nodeId": "8bc51675d25841ee81bb8d8d111dba26",
+      "forceBackgroundGravity": {
+        "x": -8.275917E-05,
+        "y": 9.6249096E-08
+      },
+      "forceOverlapRepulsion": {
+        "x": 0,
+        "y": 0
+      },
+      "forceConnectedArcAttraction": {
+        "x": -284.06186,
+        "y": 1.0992393
+      },
+      "forceArcPointEndpoint": {
+        "x": 284.04916,
+        "y": 0
+      },
+      "forceTotal": {
+        "x": -0.012776613,
+        "y": 1.0992393
+      },
+      "predictedPositionIfNoForces": {
+        "x": 349.20825,
+        "y": 301.4822
+      },
+      "predictedVelocityIfNoForces": {
+        "x": 0,
+        "y": 0
+      },
+      "deltaPositionIfNoForces": {
+        "x": 0,
+        "y": 0
+      },
+      "predictedPositionBeforeConstraints": {
+        "x": 349.20825,
+        "y": 301.48224
+      },
+      "predictedPosition": {
+        "x": 349.20825,
+        "y": 301.48224
+      },
+      "deltaPositionBeforeConstraints": {
+        "x": 0,
+        "y": 3.0517578E-05
+      },
+      "deltaPosition": {
+        "x": 0,
+        "y": 3.0517578E-05
+      }
+    },
+    {
+      "nodeId": "dd1855e74c464d6db8422af4e3bfbcab",
+      "forceBackgroundGravity": {
+        "x": 4.1131072E-05,
+        "y": -0.00037654856
+      },
+      "forceOverlapRepulsion": {
+        "x": 0,
+        "y": 0
+      },
+      "forceConnectedArcAttraction": {
+        "x": 142.03188,
+        "y": -62.98457
+      },
+      "forceArcPointEndpoint": {
+        "x": -142.02486,
+        "y": 0.00018310545
+      },
+      "forceTotal": {
+        "x": 0.0070598125,
+        "y": -62.984764
+      },
+      "predictedPositionIfNoForces": {
+        "x": 50.653896,
+        "y": 342.33478
+      },
+      "predictedVelocityIfNoForces": {
+        "x": 0,
+        "y": 0
+      },
+      "deltaPositionIfNoForces": {
+        "x": 0,
+        "y": 0
+      },
+      "predictedPositionBeforeConstraints": {
+        "x": 50.653896,
+        "y": 342.3331
+      },
+      "predictedPosition": {
+        "x": 50.653896,
+        "y": 342.3331
+      },
+      "deltaPositionBeforeConstraints": {
+        "x": 0,
+        "y": -0.0016784668
+      },
+      "deltaPosition": {
+        "x": 0,
+        "y": -0.0016784668
+      }
+    },
+    {
+      "nodeId": "9841d7a334174d04a44159f106decd27",
+      "forceBackgroundGravity": {
+        "x": 4.16281E-05,
+        "y": 0.0003764523
+      },
+      "forceOverlapRepulsion": {
+        "x": 0,
+        "y": 0
+      },
+      "forceConnectedArcAttraction": {
+        "x": 142.02998,
+        "y": 61.88533
+      },
+      "forceArcPointEndpoint": {
+        "x": -142.0243,
+        "y": -0.00018310545
+      },
+      "forceTotal": {
+        "x": 0.005717039,
+        "y": 61.885525
+      },
+      "predictedPositionIfNoForces": {
+        "x": 50.60236,
+        "y": 261.34164
+      },
+      "predictedVelocityIfNoForces": {
+        "x": 0,
+        "y": 0
+      },
+      "deltaPositionIfNoForces": {
+        "x": 0,
+        "y": 0
+      },
+      "predictedPositionBeforeConstraints": {
+        "x": 50.60236,
+        "y": 261.3433
+      },
+      "predictedPosition": {
+        "x": 50.60236,
+        "y": 261.3433
+      },
+      "deltaPositionBeforeConstraints": {
+        "x": 0,
+        "y": 0.0016479492
+      },
+      "deltaPosition": {
+        "x": 0,
+        "y": 0.0016479492
+      }
+    }
+  ],
+  "sumBackgroundGravityForce": {
+    "x": 0,
+    "y": 0
+  },
+  "sumOverlapRepulsionForce": {
+    "x": 0,
+    "y": 0
+  },
+  "sumConnectedArcAttractionForce": {
+    "x": 0,
+    "y": 0
+  },
+  "sumArcPointEndpointForce": {
+    "x": 0,
+    "y": 0
+  },
+  "sumTotalForce": {
+    "x": 2.3841858E-07,
+    "y": 0
+  },
+  "uiDebug": {
+    "tickCounter": 80,
+    "isAutoStopped": true,
+    "noPixelMoveTicks": 35,
+    "autoStopNoPixelMoveTicksThreshold": 30,
+    "lastPixelMoveTick": 45,
+    "lastPixelMoveInfo": "8bc51675d25841ee81bb8d8d111dba26: (349,302) -\u003E (349,301)",
+    "enablePortLabelAwareNodeMovement": false,
+    "enableArcLabelAwareNodeMovement": false
+  }
+}

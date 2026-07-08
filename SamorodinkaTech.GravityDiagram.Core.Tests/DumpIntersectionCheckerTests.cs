@@ -13,7 +13,7 @@ public sealed class DumpIntersectionCheckerTests
     [Fact]
     public void CheckLatestDump_ForInteriorArcSegmentIntersections()
     {
-        var dump = LoadDump("gravity-dump-latest-20260207-065638.json");
+        var (dump, _) = LoadDump("gravity-dump-latest-20260207-065638.json");
 
         var diagram = BuildDiagram(dump);
         var settings = BuildSettings(dump);
@@ -61,7 +61,7 @@ public sealed class DumpIntersectionCheckerTests
     [Fact]
     public void CheckFreshV5Dump_ForInteriorArcSegmentIntersections()
     {
-        var dump = LoadFreshDump("gravity-dump-20260519-034538.410-a78b5194031b40578f6ce2ab2862c5a5.json");
+        var (dump, _) = LoadDump("gravity-dump-20260519-034538.410-a78b5194031b40578f6ce2ab2862c5a5.json");
 
         var diagram = BuildDiagram(dump);
         Assert.Equal(2, diagram.Nodes.Count);
@@ -171,10 +171,14 @@ public sealed class DumpIntersectionCheckerTests
         Assert.Equal(0, violations);
     }
 
-    private static DumpRoot LoadDump(string fileName)
+    private static (DumpRoot dump, float dt) LoadDump(string fileName)
     {
         var path = Path.Combine(AppContext.BaseDirectory, "TestData", fileName);
         var json = File.ReadAllText(path);
+
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        var dt = root.TryGetProperty("dt", out var dtProp) ? dtProp.GetSingle() : 0.016666668f;
 
         var dump = JsonSerializer.Deserialize<DumpRoot>(json, new JsonSerializerOptions
         {
@@ -182,7 +186,7 @@ public sealed class DumpIntersectionCheckerTests
         });
 
         Assert.NotNull(dump);
-        return dump!;
+        return (dump!, dt);
     }
 
     private static Diagram BuildDiagram(DumpRoot dump)
@@ -245,189 +249,13 @@ public sealed class DumpIntersectionCheckerTests
             SoftOverlapBoostWhenHardDisabled = s.SoftOverlapBoostWhenHardDisabled,
             Drag = s.Drag,
             MaxSpeed = s.MaxSpeed,
+            ArcPointAttractionK = s.ArcPointAttractionK,
+            ArcPointMoveFactor = s.ArcPointMoveFactor,
+            ArcPointNodeRepulsionK = s.ArcPointNodeRepulsionK,
+            ArcPointMergeDistance = s.ArcPointMergeDistance,
+            ArcPointConstraintIterations = s.ArcPointConstraintIterations,
+            ArcPointExtraClearance = s.ArcPointExtraClearance,
+            MaxArcInternalPoints = s.MaxArcInternalPoints,
         };
     }
-
-    private static FreshDumpRoot LoadFreshDump(string fileName)
-    {
-        var path = Path.Combine(AppContext.BaseDirectory, "TestData", fileName);
-        var json = File.ReadAllText(path);
-
-        var dump = JsonSerializer.Deserialize<FreshDumpRoot>(json, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-        });
-
-        Assert.NotNull(dump);
-        return dump!;
-    }
-
-    private static Diagram BuildDiagram(FreshDumpRoot dump)
-    {
-        var d = new Diagram { AutoDistributePorts = false };
-
-        foreach (var n in dump.Diagram.Nodes)
-        {
-            d.AddNode(new RectNode
-            {
-                Id = new DiagramId(n.Id),
-                Text = n.Text ?? string.Empty,
-                Position = new Vector2(n.Position.X, n.Position.Y),
-                Velocity = new Vector2(n.Velocity.X, n.Velocity.Y),
-                Width = n.Width,
-                Height = n.Height,
-            });
-        }
-
-        foreach (var p in dump.Diagram.Ports)
-        {
-            d.AddPort(new Port
-            {
-                Id = new DiagramId(p.Id),
-                Text = p.Text ?? string.Empty,
-                Ref = new PortRef(new DiagramId(p.NodeId), Enum.Parse<RectSide>(p.Side, ignoreCase: true), p.Offset),
-            });
-        }
-
-        foreach (var a in dump.Diagram.Arcs)
-        {
-            d.AddArc(new Arc
-            {
-                Id = new DiagramId(a.Id),
-                Text = a.Text ?? string.Empty,
-                FromPortId = new DiagramId(a.FromPortId),
-                ToPortId = new DiagramId(a.ToPortId),
-            });
-        }
-
-        return d;
-    }
-
-    private static LayoutSettings BuildSettings(FreshDumpRoot dump)
-    {
-        var s = dump.Settings;
-        return new LayoutSettings
-        {
-            NodeMass = s.NodeMass,
-            Softening = s.Softening,
-            BackgroundPairGravity = s.BackgroundPairGravity,
-            EdgeSpringRestLength = s.EdgeSpringRestLength,
-            ConnectedArcAttractionK = s.ConnectedArcAttractionK,
-            MinimizeArcLength = s.MinimizeArcLength,
-            MinNodeSpacing = s.MinNodeSpacing,
-            UseHardMinSpacing = s.UseHardMinSpacing,
-            HardMinSpacingIterations = s.HardMinSpacingIterations,
-            HardMinSpacingSlop = s.HardMinSpacingSlop,
-            OverlapRepulsionK = s.OverlapRepulsionK,
-            SoftOverlapBoostWhenHardDisabled = s.SoftOverlapBoostWhenHardDisabled,
-            Drag = s.Drag,
-            MaxSpeed = s.MaxSpeed,
-        };
-    }
-
-    private sealed record FreshDumpRoot(
-        DumpSettingsV5 Settings,
-        DumpDiagramV5 Diagram);
-
-    private sealed record DumpSettingsV5(
-        float NodeMass,
-        float Softening,
-        float BackgroundPairGravity,
-        float EdgeSpringRestLength,
-        float ConnectedArcAttractionK,
-        bool MinimizeArcLength,
-        float MinNodeSpacing,
-        bool UseHardMinSpacing,
-        int HardMinSpacingIterations,
-        float HardMinSpacingSlop,
-        float OverlapRepulsionK,
-        float SoftOverlapBoostWhenHardDisabled,
-        float Drag,
-        float MaxSpeed,
-        float ArcPointAttractionK,
-        float ArcPointMoveFactor,
-        float ArcPointNodeRepulsionK,
-        float ArcPointMergeDistance,
-        int ArcPointConstraintIterations,
-        float ArcPointExtraClearance,
-        int MaxArcInternalPoints);
-
-    private sealed record DumpDiagramV5(
-        DumpNodeV5[] Nodes,
-        DumpPortV5[] Ports,
-        DumpArcV5[] Arcs);
-
-    private sealed record DumpNodeV5(
-        string Id,
-        string? Text,
-        DumpVec2 Position,
-        DumpVec2 Velocity,
-        float Width,
-        float Height);
-
-    private sealed record DumpPortV5(
-        string Id,
-        string? Text,
-        string NodeId,
-        string Side,
-        float Offset,
-        float ClampedOffset,
-        DumpVec2? WorldPosition);
-
-    private sealed record DumpArcV5(
-        string Id,
-        string? Text,
-        string FromPortId,
-        string ToPortId,
-        DumpVec2[] InternalPoints,
-        DumpVec2[] InternalPointForces);
-
-    private sealed record DumpRoot(
-        float Dt,
-        DumpSettings Settings,
-        DumpDiagram Diagram);
-
-    private sealed record DumpSettings(
-        float NodeMass,
-        float Softening,
-        float BackgroundPairGravity,
-        float EdgeSpringRestLength,
-        float ConnectedArcAttractionK,
-        bool MinimizeArcLength,
-        float MinNodeSpacing,
-        bool UseHardMinSpacing,
-        int HardMinSpacingIterations,
-        float HardMinSpacingSlop,
-        float OverlapRepulsionK,
-        float SoftOverlapBoostWhenHardDisabled,
-        float Drag,
-        float MaxSpeed);
-
-    private sealed record DumpDiagram(
-        DumpNode[] Nodes,
-        DumpPort[] Ports,
-        DumpArc[] Arcs);
-
-    private sealed record DumpNode(
-        string Id,
-        string? Text,
-        DumpVec2 Position,
-        DumpVec2 Velocity,
-        float Width,
-        float Height);
-
-    private sealed record DumpPort(
-        string Id,
-        string? Text,
-        string NodeId,
-        string Side,
-        float Offset);
-
-    private sealed record DumpArc(
-        string Id,
-        string? Text,
-        string FromPortId,
-        string ToPortId);
-
-    private sealed record DumpVec2(float X, float Y);
 }

@@ -47,6 +47,7 @@ public partial class MainWindow : Window
         BindSlider("RestLenSlider", "RestLenValue", () => s.EdgeSpringRestLength, v => s.EdgeSpringRestLength = v, "0");
         BindSlider("RepulsionSlider", "RepulsionValue", () => s.OverlapRepulsionK, v => s.OverlapRepulsionK = v, "0");
         BindSlider("SoftOverlapBoostSlider", "SoftOverlapBoostValue", () => s.SoftOverlapBoostWhenHardDisabled, v => s.SoftOverlapBoostWhenHardDisabled = v, "0.00");
+        BindSlider("ForceNormThresholdSlider", "ForceNormThresholdValue", () => s.ForceNormalizationThreshold, v => s.ForceNormalizationThreshold = v, "0.00");
 
         BindCheckBox("MinimizeArcCheck", () => s.MinimizeArcLength, v => s.MinimizeArcLength = v);
         var arcOpts = DiagramView.Engine.Settings.ArcLayoutOptions;

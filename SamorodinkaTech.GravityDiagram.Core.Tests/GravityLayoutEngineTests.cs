@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Numerics;
+using System.Reflection;
 using System.Text.Json;
 using SamorodinkaTech.GravityDiagram.Core;
 using Xunit;
@@ -54,9 +56,44 @@ public sealed class GravityLayoutEngineTests
 	}
 
 	[Fact]
+	public void NormalizeForcesByMaxMagnitude_ScalesTotalAndArcEndpointForcesRelativeToLargestVector()
+	{
+		var total = new[] { new Vector2(10f, 0f), new Vector2(0f, 3f) };
+		var arcPointEndpoint = new[] { new Vector2(20f, 0f), new Vector2(0f, -6f) };
+
+		var engine = new GravityLayoutEngine(new LayoutSettings { ForceNormalizationThreshold = 1f });
+		var method = typeof(GravityLayoutEngine).GetMethod("NormalizeForcesByMaxMagnitude", BindingFlags.NonPublic | BindingFlags.Instance);
+		Assert.NotNull(method);
+		method!.Invoke(engine, new object?[] { total, arcPointEndpoint });
+
+		Assert.Equal(1f, total[0].Length(), 4);
+		Assert.Equal(0.3f, total[1].Length(), 4);
+		Assert.Equal(2f, arcPointEndpoint[0].Length(), 4);
+		Assert.Equal(0.6f, arcPointEndpoint[1].Length(), 4);
+		Assert.Equal(new Vector2(1f, 0f), total[0]);
+		Assert.Equal(new Vector2(0f, 0.3f), total[1]);
+		Assert.Equal(new Vector2(2f, 0f), arcPointEndpoint[0]);
+		Assert.Equal(new Vector2(0f, -0.6f), arcPointEndpoint[1]);
+	}
+
+	[Fact]
+	public void NormalizeForcesByMaxMagnitude_DoesNotModifyVectorsWhenLargestMagnitudeIsAtMostThreshold()
+	{
+		var total = new[] { new Vector2(0.5f, 0f), new Vector2(0f, -0.8f) };
+		var original = total.ToArray();
+
+		var engine = new GravityLayoutEngine(new LayoutSettings { ForceNormalizationThreshold = 1.0f });
+		var method = typeof(GravityLayoutEngine).GetMethod("NormalizeForcesByMaxMagnitude", BindingFlags.NonPublic | BindingFlags.Instance);
+		Assert.NotNull(method);
+		method!.Invoke(engine, new object?[] { total, null });
+
+		Assert.Equal(original, total);
+	}
+
+	[Fact]
 	public void Step_RoutesSavedDump_WithoutCrossingNodeInteriors()
 	{
-		var dump = LoadFreshDump("gravity-dump-20260519-034538.410-a78b5194031b40578f6ce2ab2862c5a5.json");
+		var (dump, _) = LoadFreshDump("gravity-dump-20260519-034538.410-a78b5194031b40578f6ce2ab2862c5a5.json");
 		var diagram = BuildDiagram(dump);
 		Assert.Equal(2, diagram.Nodes.Count);
 		Assert.Single(diagram.Arcs);
@@ -103,6 +140,166 @@ public sealed class GravityLayoutEngineTests
 			Assert.False(SegmentIntersectsRectInterior(a, b, toNode.Bounds), $"Segment [{i}] intersects target node interior: {a} -> {b}");
 		}
 	}
+	[Fact]
+	public void Step_RoutesAppDataDump_WithoutCrossingNodeInteriors()
+	{
+		var (dump, _) = LoadFreshDump("gravity-dump-20260617-043640.529-bc529a9afaf24dd5a232d88b7a380056.json");
+		Assert.NotNull(dump);
+		Assert.NotNull(dump.Diagram);
+		Assert.NotNull(dump.Diagram.Nodes);
+		Assert.NotNull(dump.Diagram.Ports);
+		Assert.NotNull(dump.Diagram.Arcs);
+		
+		var diagram = BuildDiagram(dump);
+		var settings = BuildSettings(dump);
+		
+		// Validate loaded data
+		Assert.NotEmpty(diagram.Nodes);
+		Assert.NotEmpty(diagram.Ports);
+		Assert.NotEmpty(diagram.Arcs);
+		
+		Console.WriteLine($"Loaded nodes: {diagram.Nodes.Count}");
+		foreach (var n in diagram.Nodes)
+		{
+			Console.WriteLine($"  Node {n.Id}: '{n.Text}' at {n.Position}");
+		}
+		
+		Console.WriteLine($"Loaded arcs: {diagram.Arcs.Count}");
+		foreach (var a in diagram.Arcs)
+		{
+			Console.WriteLine($"  Arc {a.Id}: '{a.Text}'");
+		}
+		
+		var engine = new GravityLayoutEngine(settings);
+
+		for (var i = 0; i < 120; i++)
+		{
+			engine.Step(diagram, 1f / 60f);
+		}
+
+		foreach (var arc in diagram.Arcs)
+		{
+			var fromPort = diagram.TryGetPort(arc.FromPortId);
+			var toPort = diagram.TryGetPort(arc.ToPortId);
+			Assert.NotNull(fromPort);
+			Assert.NotNull(toPort);
+			var fromNode = diagram.Nodes.Single(n => n.Id == fromPort!.Ref.NodeId);
+			var toNode = diagram.Nodes.Single(n => n.Id == toPort!.Ref.NodeId);
+
+			var pts = new List<Vector2> { GravityLayoutEngine.GetPortWorldPosition(fromNode, fromPort!.Ref) };
+			pts.AddRange(arc.InternalPoints);
+			pts.Add(GravityLayoutEngine.GetPortWorldPosition(toNode, toPort!.Ref));
+
+			for (var i = 0; i + 1 < pts.Count; i++)
+			{
+				var a = pts[i];
+				var b = pts[i + 1];
+				foreach (var node in diagram.Nodes)
+				{
+					Assert.False(ArcRoutingGeometry.AxisAlignedSegmentIntersectsRect(a, b, node.Bounds),
+						$"Segment [{i}] intersects node {node.Text} interior: {a} -> {b}");
+				}
+			}
+		}
+	}
+
+	[Fact]
+	public void Step_LatestRegressionDump_DetectsCrossings()
+	{
+		var (dump, _) = LoadFreshDump("gravity-dump-latest-regression.json");
+		var diagram = BuildDiagram(dump);
+		var settings = BuildSettings(dump);
+		var engine = new GravityLayoutEngine(settings);
+
+		// Check state BEFORE first step
+		CheckForCrossings(diagram, "BEFORE_FIRST_STEP");
+
+		var maxCrossings = 0;
+		var worstStep = 0;
+		var worstCrossingDetails = "";
+
+		for (var i = 0; i < 120; i++)
+		{
+			engine.Step(diagram, 1f / 60f);
+			
+			// Check after each step
+			var stepCrossings = new List<(string arcText, string nodeText)>();
+			foreach (var arc in diagram.Arcs)
+			{
+				var fromPort = diagram.TryGetPort(arc.FromPortId);
+				var toPort = diagram.TryGetPort(arc.ToPortId);
+				if (fromPort == null || toPort == null) continue;
+				
+				var fromNode = diagram.Nodes.SingleOrDefault(n => n.Id == fromPort.Ref.NodeId);
+				var toNode = diagram.Nodes.SingleOrDefault(n => n.Id == toPort.Ref.NodeId);
+				if (fromNode == null || toNode == null) continue;
+
+				var pts = new List<Vector2> { GravityLayoutEngine.GetPortWorldPosition(fromNode, fromPort.Ref) };
+				pts.AddRange(arc.InternalPoints);
+				pts.Add(GravityLayoutEngine.GetPortWorldPosition(toNode, toPort.Ref));
+
+				for (var j = 0; j + 1 < pts.Count; j++)
+				{
+					var a = pts[j];
+					var b = pts[j + 1];
+					foreach (var node in diagram.Nodes)
+					{
+						if (ArcRoutingGeometry.AxisAlignedSegmentIntersectsRect(a, b, node.Bounds))
+						{
+							stepCrossings.Add((arc.Text, node.Text));
+						}
+					}
+				}
+			}
+			
+			if (stepCrossings.Count > maxCrossings)
+			{
+				maxCrossings = stepCrossings.Count;
+				worstStep = i;
+				worstCrossingDetails = string.Join(", ", stepCrossings.Select(x => $"{x.arcText}→{x.nodeText}").Distinct());
+			}
+		}
+
+		Assert.True(maxCrossings == 0, $"Step {worstStep}: {maxCrossings} crossings ({worstCrossingDetails})");
+	}
+
+	private void CheckForCrossings(Diagram diagram, string label)
+	{
+		foreach (var arc in diagram.Arcs)
+		{
+			var fromPort = diagram.TryGetPort(arc.FromPortId);
+			var toPort = diagram.TryGetPort(arc.ToPortId);
+			if (fromPort == null || toPort == null) continue;
+			
+			var fromNode = diagram.Nodes.SingleOrDefault(n => n.Id == fromPort.Ref.NodeId);
+			var toNode = diagram.Nodes.SingleOrDefault(n => n.Id == toPort.Ref.NodeId);
+			if (fromNode == null || toNode == null) continue;
+
+			var pts = new List<Vector2> { GravityLayoutEngine.GetPortWorldPosition(fromNode, fromPort.Ref) };
+			pts.AddRange(arc.InternalPoints);
+			pts.Add(GravityLayoutEngine.GetPortWorldPosition(toNode, toPort.Ref));
+
+			Console.WriteLine($"{label} {arc.Text}: {arc.InternalPoints.Count} internal points");
+			if (arc.InternalPoints.Count > 0)
+			{
+				for (var i = 0; i < arc.InternalPoints.Count; i++)
+					Console.WriteLine($"  [{i}] {arc.InternalPoints[i]}");
+			}
+
+			for (var i = 0; i + 1 < pts.Count; i++)
+			{
+				var a = pts[i];
+				var b = pts[i + 1];
+				foreach (var node in diagram.Nodes)
+				{
+					if (ArcRoutingGeometry.AxisAlignedSegmentIntersectsRect(a, b, node.Bounds))
+					{
+						Console.WriteLine($"  CROSS segment[{i}] {a} -> {b} crosses node '{node.Text}'");
+					}
+				}
+			}
+		}
+	}
 
 	[Fact]
 	public void Step_CreatesHorizontalInternalPoints_ForRightToLeft()
@@ -145,6 +342,177 @@ public sealed class GravityLayoutEngineTests
 		var second = points[1];
 		Assert.InRange(MathF.Abs(first.Y - second.Y), 0f, 0.05f);
 		Assert.True(first.X < second.X, "Internal points should progress rightward for a Right->Left port connection.");
+	}
+
+	[Fact]
+	public void Step_RoutesRightToLeftOnSameLine_WithoutCrossingNodeInteriors()
+	{
+		var diagram = new Diagram();
+		var n1 = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "A", Position = new Vector2(0, 0), Width = 100, Height = 60 });
+		var n2 = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "B", Position = new Vector2(-180, 0), Width = 100, Height = 60 });
+
+		n1.SetSideFlow(RectSide.Right, PortFlow.Outgoing);
+		n2.SetSideFlow(RectSide.Left, PortFlow.Incoming);
+
+		var p1 = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "out", Ref = new PortRef(n1.Id, RectSide.Right, 0.5f) });
+		var p2 = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "in", Ref = new PortRef(n2.Id, RectSide.Left, 0.5f) });
+		diagram.AddArc(new Arc { Id = DiagramId.New(), Text = "A->B", FromPortId = p1.Id, ToPortId = p2.Id });
+
+		var engine = new GravityLayoutEngine(new LayoutSettings
+		{
+			ArcPointAttractionK = 1f,
+			ArcPointMoveFactor = 1f,
+			ArcPointNodeRepulsionK = 0f,
+			ArcPointConstraintIterations = 6,
+			MaxArcInternalPoints = 8,
+			ConnectedArcAttractionK = 0f,
+			BackgroundPairGravity = 0f,
+			OverlapRepulsionK = 0f,
+			MinNodeSpacing = 0f,
+			UseHardMinSpacing = false,
+			Drag = 0f,
+			Softening = 0f,
+			MaxSpeed = 10000f,
+		});
+
+		engine.Step(diagram, 0.001f);
+
+		var arc = Assert.Single(diagram.Arcs);
+		var fromPort = diagram.TryGetPort(arc.FromPortId);
+		var toPort = diagram.TryGetPort(arc.ToPortId);
+		Assert.NotNull(fromPort);
+		Assert.NotNull(toPort);
+
+		var fromNode = diagram.Nodes.Single(n => n.Id == fromPort!.Ref.NodeId);
+		var toNode = diagram.Nodes.Single(n => n.Id == toPort!.Ref.NodeId);
+
+		var points = new List<Vector2> { GravityLayoutEngine.GetPortWorldPosition(fromNode, fromPort.Ref) };
+		points.AddRange(arc.InternalPoints);
+		points.Add(GravityLayoutEngine.GetPortWorldPosition(toNode, toPort.Ref));
+
+		for (var i = 0; i + 1 < points.Count; i++)
+		{
+			var a = points[i];
+			var b = points[i + 1];
+			Assert.False(ArcRoutingGeometry.AxisAlignedSegmentIntersectsRect(a, b, fromNode.Bounds), $"Segment [{i}] intersects source node interior: {a} -> {b}");
+			Assert.False(ArcRoutingGeometry.AxisAlignedSegmentIntersectsRect(a, b, toNode.Bounds), $"Segment [{i}] intersects target node interior: {a} -> {b}");
+		}
+	}
+
+	[Fact]
+	public void Step_RoutesSingleLeftTarget_WithoutCrossingNodeInteriors()
+	{
+		var diagram = new Diagram();
+		var nA = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "A", Position = new Vector2(0, 0), Width = 100, Height = 60 });
+		var nB = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "B", Position = new Vector2(-180, 0), Width = 100, Height = 60 });
+
+		nA.SetSideFlow(RectSide.Right, PortFlow.Outgoing);
+		nB.SetSideFlow(RectSide.Left, PortFlow.Incoming);
+
+		var pA = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "out", Ref = new PortRef(nA.Id, RectSide.Right, 0.5f) });
+		var pB = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "in", Ref = new PortRef(nB.Id, RectSide.Left, 0.5f) });
+		diagram.AddArc(new Arc { Id = DiagramId.New(), Text = "A->B", FromPortId = pA.Id, ToPortId = pB.Id });
+
+		var engine = new GravityLayoutEngine(new LayoutSettings
+		{
+			ArcPointAttractionK = 1f,
+			ArcPointMoveFactor = 1f,
+			ArcPointNodeRepulsionK = 0f,
+			ArcPointConstraintIterations = 0,
+			MaxArcInternalPoints = 8,
+			ConnectedArcAttractionK = 0f,
+			BackgroundPairGravity = 0f,
+			OverlapRepulsionK = 0f,
+			MinNodeSpacing = 0f,
+			UseHardMinSpacing = false,
+			Drag = 0f,
+			Softening = 0f,
+			MaxSpeed = 10000f,
+		});
+
+		engine.Step(diagram, 0.001f);
+
+		foreach (var arc in diagram.Arcs)
+		{
+			var fromPort = diagram.TryGetPort(arc.FromPortId);
+			var toPort = diagram.TryGetPort(arc.ToPortId);
+			Assert.NotNull(fromPort);
+			Assert.NotNull(toPort);
+			var fromNode = diagram.Nodes.Single(n => n.Id == fromPort!.Ref.NodeId);
+			var toNode = diagram.Nodes.Single(n => n.Id == toPort!.Ref.NodeId);
+
+			var pts = new List<Vector2> { GravityLayoutEngine.GetPortWorldPosition(fromNode, fromPort!.Ref) };
+			pts.AddRange(arc.InternalPoints);
+			pts.Add(GravityLayoutEngine.GetPortWorldPosition(toNode, toPort!.Ref));
+
+			for (var i = 0; i + 1 < pts.Count; i++)
+			{
+				var a = pts[i];
+				var b = pts[i + 1];
+				Assert.False(ArcRoutingGeometry.AxisAlignedSegmentIntersectsRect(a, b, fromNode.Bounds), $"Segment [{i}] intersects source node interior: {a} -> {b}");
+				Assert.False(ArcRoutingGeometry.AxisAlignedSegmentIntersectsRect(a, b, toNode.Bounds), $"Segment [{i}] intersects target node interior: {a} -> {b}");
+			}
+		}
+	}
+
+	[Fact]
+	public void Step_RoutesTwoLeftTargets_WithoutCrossingNodeInteriors()
+	{
+		var diagram = new Diagram();
+		var nA = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "A", Position = new Vector2(0, 0), Width = 100, Height = 60 });
+		var nB1 = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "B1", Position = new Vector2(-180, -40), Width = 100, Height = 60 });
+		var nB2 = diagram.AddNode(new RectNode { Id = DiagramId.New(), Text = "B2", Position = new Vector2(-180, 40), Width = 100, Height = 60 });
+
+		nA.SetSideFlow(RectSide.Right, PortFlow.Outgoing);
+		nB1.SetSideFlow(RectSide.Left, PortFlow.Incoming);
+		nB2.SetSideFlow(RectSide.Left, PortFlow.Incoming);
+
+		var pA = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "out", Ref = new PortRef(nA.Id, RectSide.Right, 0.5f) });
+		var pB1 = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "in1", Ref = new PortRef(nB1.Id, RectSide.Left, 0.5f) });
+		var pB2 = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "in2", Ref = new PortRef(nB2.Id, RectSide.Left, 0.5f) });
+		diagram.AddArc(new Arc { Id = DiagramId.New(), Text = "A->B1", FromPortId = pA.Id, ToPortId = pB1.Id });
+		diagram.AddArc(new Arc { Id = DiagramId.New(), Text = "A->B2", FromPortId = pA.Id, ToPortId = pB2.Id });
+
+		var engine = new GravityLayoutEngine(new LayoutSettings
+		{
+			ArcPointAttractionK = 1f,
+			ArcPointMoveFactor = 1f,
+			ArcPointNodeRepulsionK = 0f,
+			ArcPointConstraintIterations = 0,
+			MaxArcInternalPoints = 12,
+			ConnectedArcAttractionK = 0f,
+			BackgroundPairGravity = 0f,
+			OverlapRepulsionK = 0f,
+			MinNodeSpacing = 0f,
+			UseHardMinSpacing = false,
+			Drag = 0f,
+			Softening = 0f,
+			MaxSpeed = 10000f,
+		});
+
+		engine.Step(diagram, 0.001f);
+
+		foreach (var arc in diagram.Arcs)
+		{
+			var fromPort = diagram.TryGetPort(arc.FromPortId);
+			var toPort = diagram.TryGetPort(arc.ToPortId);
+			Assert.NotNull(fromPort);
+			Assert.NotNull(toPort);
+			var fromNode = diagram.Nodes.Single(n => n.Id == fromPort!.Ref.NodeId);
+			var toNode = diagram.Nodes.Single(n => n.Id == toPort!.Ref.NodeId);
+
+			var pts = new List<Vector2> { GravityLayoutEngine.GetPortWorldPosition(fromNode, fromPort!.Ref) };
+			pts.AddRange(arc.InternalPoints);
+			pts.Add(GravityLayoutEngine.GetPortWorldPosition(toNode, toPort!.Ref));
+
+			for (var i = 0; i + 1 < pts.Count; i++)
+			{
+				var a = pts[i];
+				var b = pts[i + 1];
+				Assert.False(ArcRoutingGeometry.AxisAlignedSegmentIntersectsRect(a, b, fromNode.Bounds), $"Segment [{i}] intersects source node interior: {a} -> {b}");
+				Assert.False(ArcRoutingGeometry.AxisAlignedSegmentIntersectsRect(a, b, toNode.Bounds), $"Segment [{i}] intersects target node interior: {a} -> {b}");
+			}
+		}
 	}
 
 	[Fact]
@@ -339,7 +707,7 @@ public void TestDataFiles_AreCopiedToOutputAndLoadable()
 		foreach (var file in jsonFiles)
 		{
 			var text = File.ReadAllText(file);
-			var dump = JsonSerializer.Deserialize<FreshDumpRoot>(text, options);
+			var dump = JsonSerializer.Deserialize<DumpRoot>(text, options);
 			Assert.NotNull(dump);
 			var diagram = BuildDiagram(dump!);
 			var settings = BuildSettings(dump!);
@@ -395,20 +763,25 @@ public void TestDataFiles_AreCopiedToOutputAndLoadable()
 		return mid.X > r.Left && mid.X < r.Right && mid.Y > r.Top && mid.Y < r.Bottom;
 	}
 
-	private static FreshDumpRoot LoadFreshDump(string fileName)
+	private static (DumpRoot dump, float dt) LoadFreshDump(string fileName)
 	{
 		var path = Path.Combine(AppContext.BaseDirectory, "TestData", fileName);
 		var json = File.ReadAllText(path);
-		var dump = JsonSerializer.Deserialize<FreshDumpRoot>(json, new JsonSerializerOptions
+
+		using var doc = JsonDocument.Parse(json);
+		var root = doc.RootElement;
+		var dt = root.TryGetProperty("dt", out var dtProp) ? dtProp.GetSingle() : 0.016666668f;
+
+		var dump = JsonSerializer.Deserialize<DumpRoot>(json, new JsonSerializerOptions
 		{
 			PropertyNameCaseInsensitive = true,
 		});
 
 		Assert.NotNull(dump);
-		return dump!;
+		return (dump!, dt);
 	}
 
-	private static Diagram BuildDiagram(FreshDumpRoot dump)
+	private static Diagram BuildDiagram(DumpRoot dump)
 	{
 		var d = new Diagram { AutoDistributePorts = false };
 
@@ -449,7 +822,7 @@ public void TestDataFiles_AreCopiedToOutputAndLoadable()
 		return d;
 	}
 
-	private static LayoutSettings BuildSettings(FreshDumpRoot dump)
+	private static LayoutSettings BuildSettings(DumpRoot dump)
 	{
 		var s = dump.Settings;
 		return new LayoutSettings
@@ -468,37 +841,15 @@ public void TestDataFiles_AreCopiedToOutputAndLoadable()
 			SoftOverlapBoostWhenHardDisabled = s.SoftOverlapBoostWhenHardDisabled,
 			Drag = s.Drag,
 			MaxSpeed = s.MaxSpeed,
+			ArcPointAttractionK = s.ArcPointAttractionK,
+			ArcPointMoveFactor = s.ArcPointMoveFactor,
+			ArcPointNodeRepulsionK = s.ArcPointNodeRepulsionK,
+			ArcPointMergeDistance = s.ArcPointMergeDistance,
+			ArcPointConstraintIterations = s.ArcPointConstraintIterations,
+			ArcPointExtraClearance = s.ArcPointExtraClearance,
+			MaxArcInternalPoints = s.MaxArcInternalPoints,
 		};
 	}
-
-	private sealed record FreshDumpRoot(DumpSettingsV5 Settings, DumpDiagramV5 Diagram);
-	private sealed record DumpSettingsV5(
-		float NodeMass,
-		float Softening,
-		float BackgroundPairGravity,
-		float EdgeSpringRestLength,
-		float ConnectedArcAttractionK,
-		bool MinimizeArcLength,
-		float MinNodeSpacing,
-		bool UseHardMinSpacing,
-		int HardMinSpacingIterations,
-		float HardMinSpacingSlop,
-		float OverlapRepulsionK,
-		float SoftOverlapBoostWhenHardDisabled,
-		float Drag,
-		float MaxSpeed,
-		float ArcPointAttractionK,
-		float ArcPointMoveFactor,
-		float ArcPointNodeRepulsionK,
-		float ArcPointMergeDistance,
-		int ArcPointConstraintIterations,
-		float ArcPointExtraClearance,
-		int MaxArcInternalPoints);
-	private sealed record DumpDiagramV5(DumpNodeV5[] Nodes, DumpPortV5[] Ports, DumpArcV5[] Arcs);
-	private sealed record DumpNodeV5(string Id, string? Text, DumpVec2 Position, DumpVec2 Velocity, float Width, float Height);
-	private sealed record DumpPortV5(string Id, string? Text, string NodeId, string Side, float Offset, float ClampedOffset, DumpVec2? WorldPosition);
-	private sealed record DumpArcV5(string Id, string? Text, string FromPortId, string ToPortId, DumpVec2[] InternalPoints, DumpVec2[] InternalPointForces);
-	private sealed record DumpVec2(float X, float Y);
 
 	[Fact]
 	public void Step_RoutesAroundBlockingNode_WithoutCrossingAnyNodeInterior()

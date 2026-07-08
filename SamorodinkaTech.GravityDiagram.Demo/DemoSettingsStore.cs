@@ -84,10 +84,11 @@ public sealed class DemoSettingsStore
         float SoftOverlapBoostWhenHardDisabled,
         float Softening,
         float Drag,
-        float MaxSpeed)
+        float MaxSpeed,
+        float ForceNormalizationThreshold)
     {
         public static LayoutSettingsDto From(LayoutSettings s) => new(
-            Version: 2,
+            Version: 3,
             NodeMass: s.NodeMass,
             BackgroundPairGravity: s.BackgroundPairGravity,
             ConnectedArcAttractionK: s.ConnectedArcAttractionK,
@@ -100,7 +101,8 @@ public sealed class DemoSettingsStore
             SoftOverlapBoostWhenHardDisabled: s.SoftOverlapBoostWhenHardDisabled,
             Softening: s.Softening,
             Drag: s.Drag,
-            MaxSpeed: s.MaxSpeed);
+            MaxSpeed: s.MaxSpeed,
+            ForceNormalizationThreshold: s.ForceNormalizationThreshold);
 
         public void ApplyTo(LayoutSettings s)
         {
@@ -121,6 +123,7 @@ public sealed class DemoSettingsStore
             s.Softening = Softening;
             s.Drag = Drag;
             s.MaxSpeed = MaxSpeed;
+            s.ForceNormalizationThreshold = MathF.Max(0f, ForceNormalizationThreshold);
         }
     }
 }

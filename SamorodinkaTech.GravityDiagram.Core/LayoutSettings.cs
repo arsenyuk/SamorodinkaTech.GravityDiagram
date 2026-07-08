@@ -44,7 +44,7 @@ public sealed class LayoutSettings
 	public bool MinimizeArcLength { get; set; } = false;
 
 	// Minimum edge-to-edge distance between rectangles.
-	// NOTE: this setting is preserved for compatibility but is no longer used in layout calculations.
+	// Used by ApplyHardMinSpacing when UseHardMinSpacing=true.
 	public float MinNodeSpacing { get; set; } = 0f;
 
 	// If true, applies a hard post-step constraint solver that enforces MinNodeSpacing.
@@ -59,6 +59,10 @@ public sealed class LayoutSettings
 	public float SoftOverlapBoostWhenHardDisabled { get; set; } = 4f;
 	public float Drag { get; set; } = 2.2f;
 	public float MaxSpeed { get; set; } = 2500f;
+
+	// Threshold for force normalization: forces are normalized by max magnitude only if max > threshold.
+	// This prevents small noise forces from driving the system when all forces are negligible.
+	public float ForceNormalizationThreshold { get; set; } = 1.0f;
 
 	// --- Arc layout options ---
 	public ArcLayoutOptions ArcLayoutOptions { get; set; } = new ArcLayoutOptions();

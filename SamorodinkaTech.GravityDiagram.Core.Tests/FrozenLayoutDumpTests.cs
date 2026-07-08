@@ -13,13 +13,13 @@ public sealed class FrozenLayoutDumpTests
     [Fact]
     public void PreviewStep_FromSavedDump_HasNoNextPixelStep_EvenThoughContinuousMoveExists()
     {
-        var dump = LoadDump("gravity-dump-latest-20260207-065638.json");
+        var (dump, dt) = LoadDump("gravity-dump-latest-20260207-065638.json");
 
         var diagram = BuildDiagram(dump);
         var settings = BuildSettings(dump);
         var engine = new GravityLayoutEngine(settings);
 
-        var preview = engine.PreviewStep(diagram, dump.Dt);
+        var preview = engine.PreviewStep(diagram, dt);
 
         // The actual freeze condition in UI is pixel-stability: no integer pixel coordinate changes.
         // Under that meaning, this dump should have NO "next step".
@@ -47,13 +47,13 @@ public sealed class FrozenLayoutDumpTests
     [Fact]
     public void PreviewStep_FromSavedDump_ArcAttractionHasXComponent()
     {
-        var dump = LoadDump("gravity-dump-latest-20260207-065638.json");
+        var (dump, dt) = LoadDump("gravity-dump-latest-20260207-065638.json");
 
         var diagram = BuildDiagram(dump);
         var settings = BuildSettings(dump);
         var engine = new GravityLayoutEngine(settings);
 
-        var preview = engine.PreviewStep(diagram, dump.Dt);
+        var preview = engine.PreviewStep(diagram, dt);
 
         var arc = diagram.Arcs.Single();
         var fromPort = diagram.TryGetPort(arc.FromPortId);
@@ -84,12 +84,12 @@ public sealed class FrozenLayoutDumpTests
     [Fact]
     public void PreviewStep_FromFrozenNonoptimalDump_ArcAttractionHasXComponent()
     {
-        var dump = LoadDump("gravity-dump-frozen-nonoptimal-20260207.json");
+        var (dump, dt) = LoadDump("gravity-dump-frozen-nonoptimal-20260207.json");
 
         var diagram = BuildDiagram(dump);
         var settings = BuildSettings(dump);
         var engine = new GravityLayoutEngine(settings);
-        var preview = engine.PreviewStep(diagram, dump.Dt);
+        var preview = engine.PreviewStep(diagram, dt);
 
         var arc = diagram.Arcs.Single();
         var fromPort = diagram.TryGetPort(arc.FromPortId);
@@ -116,7 +116,7 @@ public sealed class FrozenLayoutDumpTests
     [Fact]
     public void ArcRoutingExitPoint_FromSavedDump_IsPerpendicularAndAtMinSpacing()
     {
-        var dump = LoadDump("gravity-dump-latest-20260207-065638.json");
+        var (dump, _) = LoadDump("gravity-dump-latest-20260207-065638.json");
         var diagram = BuildDiagram(dump);
         var settings = BuildSettings(dump);
 
@@ -150,10 +150,16 @@ public sealed class FrozenLayoutDumpTests
         Assert.True(Vector2.DistanceSquared(Vector2.Normalize(dirTo), expectedDirTo) < 1e-6f);
     }
 
-    private static DumpRoot LoadDump(string fileName)
+    private static (DumpRoot dump, float dt) LoadDump(string fileName)
     {
         var path = Path.Combine(AppContext.BaseDirectory, "TestData", fileName);
         var json = File.ReadAllText(path);
+
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        // Extract dt from root level (both v4 and v5 have it)
+        var dt = root.TryGetProperty("dt", out var dtProp) ? dtProp.GetSingle() : 0.016666668f;
 
         var dump = JsonSerializer.Deserialize<DumpRoot>(json, new JsonSerializerOptions
         {
@@ -161,7 +167,7 @@ public sealed class FrozenLayoutDumpTests
         });
 
         Assert.NotNull(dump);
-        return dump!;
+        return (dump!, dt);
     }
 
     private static Diagram BuildDiagram(DumpRoot dump)
@@ -226,53 +232,4 @@ public sealed class FrozenLayoutDumpTests
             MaxSpeed = s.MaxSpeed,
         };
     }
-
-    private sealed record DumpRoot(
-        float Dt,
-        DumpSettings Settings,
-        DumpDiagram Diagram);
-
-    private sealed record DumpSettings(
-        float NodeMass,
-        float Softening,
-        float BackgroundPairGravity,
-        float EdgeSpringRestLength,
-        float ConnectedArcAttractionK,
-        bool MinimizeArcLength,
-        float MinNodeSpacing,
-        bool UseHardMinSpacing,
-        int HardMinSpacingIterations,
-        float HardMinSpacingSlop,
-        float OverlapRepulsionK,
-        float SoftOverlapBoostWhenHardDisabled,
-        float Drag,
-        float MaxSpeed);
-
-    private sealed record DumpDiagram(
-        DumpNode[] Nodes,
-        DumpPort[] Ports,
-        DumpArc[] Arcs);
-
-    private sealed record DumpNode(
-        string Id,
-        string? Text,
-        DumpVec2 Position,
-        DumpVec2 Velocity,
-        float Width,
-        float Height);
-
-    private sealed record DumpPort(
-        string Id,
-        string? Text,
-        string NodeId,
-        string Side,
-        float Offset);
-
-    private sealed record DumpArc(
-        string Id,
-        string? Text,
-        string FromPortId,
-        string ToPortId);
-
-    private sealed record DumpVec2(float X, float Y);
 }
