@@ -64,9 +64,9 @@ public partial class MainWindow : Window
         modelSelector.SelectionChanged += (_, _) =>
         {
             if (modelSelector.SelectedIndex == 0)
-                DiagramView.SetDiagram(SampleDiagram.CreateThreeNode());
-            else
                 DiagramView.SetDiagram(SampleDiagram.CreateTwoNode());
+            else
+                DiagramView.SetDiagram(SampleDiagram.CreateThreeNode());
         };
     }
 
