@@ -18,7 +18,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        DiagramView.SetDiagram(SampleDiagram.CreateThreeNode());
+        DiagramView.SetDiagram(SampleDiagram.CreateTwoNode());
 
         // Prepare debounced auto-save.
         _saveDebounce = new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Background, (_, _) =>
