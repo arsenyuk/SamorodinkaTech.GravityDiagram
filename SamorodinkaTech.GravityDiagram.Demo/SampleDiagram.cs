@@ -49,7 +49,7 @@ public static class SampleDiagram
         var p1Out = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "out", Ref = new PortRef(n1.Id, RectSide.Right, 0.5f) });
         var p2In = diagram.AddPort(new Port { Id = DiagramId.New(), Text = "in", Ref = new PortRef(n2.Id, RectSide.Left, 0.5f) });
 
-        diagram.AddArc(new Arc { Id = DiagramId.New(), Text = "A→B", FromPortId = p1Out.Id, ToPortId = p2In.Id });
+        diagram.AddArc(new Arc { Id = DiagramId.New(), Text = "", FromPortId = p1Out.Id, ToPortId = p2In.Id });
 
         return diagram;
     }

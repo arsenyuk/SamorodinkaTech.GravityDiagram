@@ -122,7 +122,7 @@ public sealed class DiagramView : Control
     public DiagramView()
     {
         ClipToBounds = true;
-        Diagram = SampleDiagram.CreateThreeNode();
+        Diagram = SampleDiagram.CreateTwoNode();
         Engine = new GravityLayoutEngine(new LayoutSettings
         {
             NodeMass = 12.8f,

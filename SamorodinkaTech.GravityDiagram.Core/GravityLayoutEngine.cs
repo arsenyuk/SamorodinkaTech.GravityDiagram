@@ -740,15 +740,37 @@ public sealed class GravityLayoutEngine
 				}
 			}
 
+			// Also remove collinear points at the start and end that are on the same line as ports.
+			if (internalPoints.Count >= 2)
+			{
+				// Check first point: is it collinear with start and second point?
+				var first = internalPoints[0];
+				var second = internalPoints[1];
+				if (MathF.Abs(start.X - first.X) < 0.001f && MathF.Abs(first.X - second.X) < 0.001f)
+					internalPoints.RemoveAt(0);
+				else if (MathF.Abs(start.Y - first.Y) < 0.001f && MathF.Abs(first.Y - second.Y) < 0.001f)
+					internalPoints.RemoveAt(0);
+			}
+			if (internalPoints.Count >= 2)
+			{
+				// Check last point: is it collinear with second-to-last and end?
+				var last = internalPoints[^1];
+				var secondLast = internalPoints[^2];
+				if (MathF.Abs(secondLast.X - last.X) < 0.001f && MathF.Abs(last.X - end.X) < 0.001f)
+					internalPoints.RemoveAt(internalPoints.Count - 1);
+				else if (MathF.Abs(secondLast.Y - last.Y) < 0.001f && MathF.Abs(last.Y - end.Y) < 0.001f)
+					internalPoints.RemoveAt(internalPoints.Count - 1);
+			}
+
 			// Final snap: ensure all points are exactly axis-aligned with their neighbors.
 			// After force movement and merge, small floating-point drift can create near-diagonal segments.
+			// For each consecutive pair, snap to the axis with the LARGER original displacement.
 			for (var i = 0; i < internalPoints.Count; i++)
 			{
-				// Determine axis from the segment leading into this point.
 				Vector2 prev = (i == 0) ? start : internalPoints[i - 1];
 				var dx = MathF.Abs(prev.X - internalPoints[i].X);
 				var dy = MathF.Abs(prev.Y - internalPoints[i].Y);
-				if (dx > dy)
+				if (dx >= dy)
 				{
 					// Horizontal segment → snap Y to match previous point.
 					internalPoints[i] = new Vector2(internalPoints[i].X, prev.Y);
@@ -783,11 +805,36 @@ public sealed class GravityLayoutEngine
 				}
 			}
 
-			// Align the first and last internal points with the source and target port directions.
+			// Final cleanup: align endpoints, snap to axes, remove redundant points.
 			EnsureOrthogonalEndpoints(start, end, startSide, endSide, internalPoints);
 
-			// Remove redundant endpoint-adjacent points that create a visible "tail" near ports.
-			CleanupEndpointTails(internalPoints, start, end);
+			// Snap each point to be axis-aligned with its predecessor.
+			for (var i = 0; i < internalPoints.Count; i++)
+			{
+				var prev = (i == 0) ? start : internalPoints[i - 1];
+				var dx = MathF.Abs(prev.X - internalPoints[i].X);
+				var dy = MathF.Abs(prev.Y - internalPoints[i].Y);
+				if (dx >= dy)
+					internalPoints[i] = new Vector2(internalPoints[i].X, prev.Y);
+				else
+					internalPoints[i] = new Vector2(prev.X, internalPoints[i].Y);
+			}
+
+			// Remove points that lie on the same line as their neighbors.
+			for (var pass = 0; pass < 3; pass++)
+			{
+				for (var i = internalPoints.Count - 2; i >= 1; i--)
+				{
+					var a = internalPoints[i - 1];
+					var b = internalPoints[i];
+					var c = internalPoints[i + 1];
+					if ((MathF.Abs(a.X - b.X) < 0.01f && MathF.Abs(b.X - c.X) < 0.01f) ||
+					    (MathF.Abs(a.Y - b.Y) < 0.01f && MathF.Abs(b.Y - c.Y) < 0.01f))
+					{
+						internalPoints.RemoveAt(i);
+					}
+				}
+			}
 
 			// Keep debug force array shape consistent with the final internal point list.
 			_lastArcPointForcesByArcId[arc.Id] = (forces.Length == internalPoints.Count)
