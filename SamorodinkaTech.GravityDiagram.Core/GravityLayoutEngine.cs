@@ -604,8 +604,11 @@ public sealed class GravityLayoutEngine
 			// Ортогональная ломаная: только горизонтальные и вертикальные сегменты
 			internalPoints.Clear();
 			MakeOrthogonalPolyline(start, end, startSide, endSide, internalPoints);
+			
 			if (internalPoints.Count > maxInternal)
 				internalPoints.RemoveRange(maxInternal, internalPoints.Count - maxInternal);
+
+			// Track point count through the pipeline.
 			// Убрана фиксация крайних точек по нормали
 
 			var forces = new Vector2[internalPoints.Count];
@@ -713,6 +716,7 @@ public sealed class GravityLayoutEngine
 			// Merge adjacent internal points: remove collinear points and nearby points.
 			if (mergeDistance > 0f)
 			{
+
 				// First pass: remove collinear points (three consecutive points on the same line).
 				for (var i = internalPoints.Count - 2; i >= 1; i--)
 				{
@@ -723,6 +727,7 @@ public sealed class GravityLayoutEngine
 					var sameY = MathF.Abs(prev.Y - curr.Y) < 0.001f && MathF.Abs(curr.Y - next.Y) < 0.001f;
 					if (sameX || sameY)
 					{
+
 						internalPoints.RemoveAt(i);
 					}
 				}
@@ -732,34 +737,43 @@ public sealed class GravityLayoutEngine
 				{
 					if (Vector2.DistanceSquared(internalPoints[i2], internalPoints[i2 + 1]) <= mergeDistance2)
 					{
+
 						internalPoints[i2] = (internalPoints[i2] + internalPoints[i2 + 1]) * 0.5f;
 						internalPoints.RemoveAt(i2 + 1);
 						continue;
 					}
 					i2++;
 				}
+
 			}
 
-			// Also remove collinear points at the start and end that are on the same line as ports.
+			// Remove collinear points at the start and end that are on the same line as ports.
+			// Only remove if the point is CLOSE to the port (within portArcOffset).
 			if (internalPoints.Count >= 2)
 			{
-				// Check first point: is it collinear with start and second point?
 				var first = internalPoints[0];
 				var second = internalPoints[1];
-				if (MathF.Abs(start.X - first.X) < 0.001f && MathF.Abs(first.X - second.X) < 0.001f)
-					internalPoints.RemoveAt(0);
-				else if (MathF.Abs(start.Y - first.Y) < 0.001f && MathF.Abs(first.Y - second.Y) < 0.001f)
-					internalPoints.RemoveAt(0);
+				var distToStart = (first - start).Length();
+				if (distToStart < 24f)
+				{
+					if (MathF.Abs(start.X - first.X) < 0.001f && MathF.Abs(first.X - second.X) < 0.001f)
+						internalPoints.RemoveAt(0);
+					else if (MathF.Abs(start.Y - first.Y) < 0.001f && MathF.Abs(first.Y - second.Y) < 0.001f)
+						internalPoints.RemoveAt(0);
+				}
 			}
 			if (internalPoints.Count >= 2)
 			{
-				// Check last point: is it collinear with second-to-last and end?
 				var last = internalPoints[^1];
 				var secondLast = internalPoints[^2];
-				if (MathF.Abs(secondLast.X - last.X) < 0.001f && MathF.Abs(last.X - end.X) < 0.001f)
-					internalPoints.RemoveAt(internalPoints.Count - 1);
-				else if (MathF.Abs(secondLast.Y - last.Y) < 0.001f && MathF.Abs(last.Y - end.Y) < 0.001f)
-					internalPoints.RemoveAt(internalPoints.Count - 1);
+				var distToEnd = (last - end).Length();
+				if (distToEnd < 24f)
+				{
+					if (MathF.Abs(secondLast.X - last.X) < 0.001f && MathF.Abs(last.X - end.X) < 0.001f)
+						internalPoints.RemoveAt(internalPoints.Count - 1);
+					else if (MathF.Abs(secondLast.Y - last.Y) < 0.001f && MathF.Abs(last.Y - end.Y) < 0.001f)
+						internalPoints.RemoveAt(internalPoints.Count - 1);
+				}
 			}
 
 			// Final snap: ensure all points are exactly axis-aligned with their neighbors.
@@ -806,7 +820,9 @@ public sealed class GravityLayoutEngine
 			}
 
 			// Final cleanup: align endpoints, snap to axes, remove redundant points.
+
 			EnsureOrthogonalEndpoints(start, end, startSide, endSide, internalPoints);
+
 
 			// Snap each point to be axis-aligned with its predecessor.
 			for (var i = 0; i < internalPoints.Count; i++)
@@ -814,10 +830,11 @@ public sealed class GravityLayoutEngine
 				var prev = (i == 0) ? start : internalPoints[i - 1];
 				var dx = MathF.Abs(prev.X - internalPoints[i].X);
 				var dy = MathF.Abs(prev.Y - internalPoints[i].Y);
-				if (dx >= dy)
+				if (dx > dy)
 					internalPoints[i] = new Vector2(internalPoints[i].X, prev.Y);
-				else
+				else if (dy > dx)
 					internalPoints[i] = new Vector2(prev.X, internalPoints[i].Y);
+				// If dx == dy, don't snap — keep the original position.
 			}
 
 			// Remove points that lie on the same line as their neighbors.
