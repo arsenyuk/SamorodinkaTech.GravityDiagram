@@ -28,6 +28,8 @@ public sealed class ModelView : Control
     private static readonly Brush NodeFill = new SolidColorBrush(Color.Parse("#4A90D9"));
     private static readonly Brush NodeStroke = new SolidColorBrush(Color.Parse("#2C5F8A"));
     private static readonly Pen NodePen = new(NodeStroke, 2);
+    private static readonly Brush ZoneBrush = new SolidColorBrush(Color.FromArgb(30, 74, 144, 217));
+    private static readonly Pen ZonePen = new(new SolidColorBrush(Color.FromArgb(80, 74, 144, 217)), 1, new DashStyle([4, 4], 0));
 
     private static FormattedText MakeText(string text, double fontSize, IBrush brush)
     {
@@ -127,17 +129,20 @@ public sealed class ModelView : Control
 
             foreach (var node in Model.Nodes)
             {
+                var center = new Point(node.Position.X, node.Position.Y);
+
+                // Draw repulsion zone (circle)
+                context.DrawEllipse(ZoneBrush, ZonePen, center, Model.RepulsionL, Model.RepulsionL);
+
+                // Draw node (rectangle)
                 var rect = new Rect(
                     node.Position.X - node.Width / 2,
                     node.Position.Y - node.Height / 2,
                     node.Width,
                     node.Height);
-
-                context.FillRectangle(NodeFill, rect, 8);
                 context.DrawRectangle(null, NodePen, rect, 8);
 
-                var ft = MakeText(node.Label, 14, Brushes.White);
-
+                var ft = MakeText(node.Label, 14, NodeStroke);
                 var textX = node.Position.X - ft.Width / 2;
                 var textY = node.Position.Y - ft.Height / 2;
                 context.DrawText(ft, new Point(textX, textY));

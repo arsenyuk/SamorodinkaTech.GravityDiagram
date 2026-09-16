@@ -19,11 +19,14 @@ public partial class MainWindow : Window
     {
         var model = ModelView.Model;
 
-        BindSlider("RepulsionSlider", "RepulsionValue",
-            () => model.RepulsionK, v => model.RepulsionK = v, "F1");
+        BindSlider("RepulsionSSlider", "RepulsionSValue",
+            () => model.RepulsionS, v => model.RepulsionS = v, "F0");
 
-        BindSlider("ZoneSlider", "ZoneValue",
-            () => model.RepulsionZoneSize, v => model.RepulsionZoneSize = v, "F1");
+        BindSlider("RepulsionPSlider", "RepulsionPValue",
+            () => model.RepulsionP, v => model.RepulsionP = v, "F0");
+
+        BindSlider("RepulsionLSlider", "RepulsionLValue",
+            () => model.RepulsionL, v => model.RepulsionL = v, "F0");
 
         BindSlider("AttractionSlider", "AttractionValue",
             () => model.AttractionK, v => model.AttractionK = v, "F3");

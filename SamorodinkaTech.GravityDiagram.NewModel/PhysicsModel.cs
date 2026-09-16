@@ -23,10 +23,11 @@ public sealed class PhysicsModel
 {
     public readonly List<PhysicsNode> Nodes = [];
 
-    public float RepulsionK = 50f;
-    public float RepulsionZoneSize = 100f;
-    public float AttractionK = 0.05f;
-    public float FrictionK = 1.0f;
+    public float RepulsionS = 500f;     // max repulsion force (at distance=0)
+    public float RepulsionP = 10f;      // repulsion force at zone edge (distance=l)
+    public float RepulsionL = 100f;     // repulsion zone size
+    public float AttractionK = 0.01f;
+    public float FrictionK = 0.99f;
     public bool UseJitter = true;
 
     private const float MaxSpeed = 2000f;
@@ -50,6 +51,8 @@ public sealed class PhysicsModel
         }
 
         // Step 2: Pairwise forces based on virtual positions
+        var slopeK = RepulsionL > 0.001f ? (RepulsionS - RepulsionP) / (2f * RepulsionL) : 0f;
+
         for (var i = 0; i < Nodes.Count; i++)
         {
             for (var j = i + 1; j < Nodes.Count; j++)
@@ -64,11 +67,13 @@ public sealed class PhysicsModel
                 // Linear attraction (always active)
                 var attraction = direction * (AttractionK * distance);
 
-                // Linear repulsion (only within zone)
+                // Linear repulsion: f(x) = S - k*x, active within 2*l from center
                 Vector2 repulsion = Vector2.Zero;
-                if (distance < RepulsionZoneSize)
+                var activeZone = 2f * RepulsionL;
+                if (distance <= activeZone)
                 {
-                    repulsion = -direction * (RepulsionK * (RepulsionZoneSize - distance));
+                    var force = RepulsionS - slopeK * distance;
+                    repulsion = -direction * force;
                 }
 
                 var pairForce = attraction + repulsion;
