@@ -374,6 +374,18 @@ public sealed class GravityLayoutEngine
 			RepairArcAgainstNodes(arc, nodes, ia, ib, startAfter, endAfter, GetArcPointClearance(), Math.Clamp(_settings.MaxArcInternalPoints, 0, 512));
 			EnsureOrthogonalInternalPoints(internalPoints, nodes);
 			CleanupEndpointTails(internalPoints, startAfter, endAfter);
+
+			// Final collinear merge after all repairs — RepairArcAgainstNodes may insert collinear points.
+			for (var i = internalPoints.Count - 2; i >= 1; i--)
+			{
+				var prev = internalPoints[i - 1];
+				var curr = internalPoints[i];
+				var next = internalPoints[i + 1];
+				var sameX = MathF.Abs(prev.X - curr.X) < 0.01f && MathF.Abs(curr.X - next.X) < 0.01f;
+				var sameY = MathF.Abs(prev.Y - curr.Y) < 0.01f && MathF.Abs(curr.Y - next.Y) < 0.01f;
+				if (sameX || sameY)
+					internalPoints.RemoveAt(i);
+			}
 		}
 	}
 
@@ -723,8 +735,8 @@ public sealed class GravityLayoutEngine
 					var prev = internalPoints[i - 1];
 					var curr = internalPoints[i];
 					var next = internalPoints[i + 1];
-					var sameX = MathF.Abs(prev.X - curr.X) < 0.001f && MathF.Abs(curr.X - next.X) < 0.001f;
-					var sameY = MathF.Abs(prev.Y - curr.Y) < 0.001f && MathF.Abs(curr.Y - next.Y) < 0.001f;
+					var sameX = MathF.Abs(prev.X - curr.X) < 0.01f && MathF.Abs(curr.X - next.X) < 0.01f;
+					var sameY = MathF.Abs(prev.Y - curr.Y) < 0.01f && MathF.Abs(curr.Y - next.Y) < 0.01f;
 					if (sameX || sameY)
 					{
 
@@ -823,6 +835,19 @@ public sealed class GravityLayoutEngine
 
 			EnsureOrthogonalEndpoints(start, end, startSide, endSide, internalPoints);
 
+			// Collinear merge after EnsureOrthogonalEndpoints — it may insert collinear points.
+			Console.WriteLine($"[merge3] count={internalPoints.Count}");
+			for (var i = internalPoints.Count - 2; i >= 1; i--)
+			{
+				var prev = internalPoints[i - 1];
+				var curr = internalPoints[i];
+				var next = internalPoints[i + 1];
+				var sameX = MathF.Abs(prev.X - curr.X) < 0.01f && MathF.Abs(curr.X - next.X) < 0.01f;
+				var sameY = MathF.Abs(prev.Y - curr.Y) < 0.01f && MathF.Abs(curr.Y - next.Y) < 0.01f;
+				Console.WriteLine($"[merge3] i={i} prev=({prev.X:F2},{prev.Y:F2}) curr=({curr.X:F2},{curr.Y:F2}) next=({next.X:F2},{next.Y:F2}) sameX={sameX} sameY={sameY}");
+				if (sameX || sameY)
+					internalPoints.RemoveAt(i);
+			}
 
 			// Snap each point to be axis-aligned with its predecessor.
 			for (var i = 0; i < internalPoints.Count; i++)

@@ -8,12 +8,22 @@ using Xunit.Abstractions;
 
 namespace SamorodinkaTech.GravityDiagram.Core.Tests;
 
+/// <summary>
+/// Динамические тесты маршрутизации дуг: проверяют поведение движка при движении нод.
+/// </summary>
 public sealed class DynamicArcRoutingTests
 {
     private readonly ITestOutputHelper _output;
 
     public DynamicArcRoutingTests(ITestOutputHelper output) => _output = output;
 
+    /// <summary>
+    /// Нода B кружит вокруг ноды A по окружности (12 позиций, по 30°).
+    /// На каждой позиции проверяется что:
+    /// 1) Все сегменты дуги горизонтальные или вертикальные (90° углы).
+    /// 2) Нет лишних точек на одной прямой.
+    /// 3) Дуга не пересекает внутренность ни одной ноды.
+    /// </summary>
     [Fact]
     public void ArcRoutesCorrectly_WhenNodeBCirclesAroundA()
     {

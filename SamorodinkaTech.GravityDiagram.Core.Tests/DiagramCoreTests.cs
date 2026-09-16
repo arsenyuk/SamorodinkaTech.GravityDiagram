@@ -1,10 +1,16 @@
-﻿using System.Numerics;
+using System.Numerics;
 using SamorodinkaTech.GravityDiagram.Core;
 
 namespace SamorodinkaTech.GravityDiagram.Core.Tests;
 
+/// <summary>
+/// Базовые тесты доменной модели: RectF, RectNode, Port, Arc, Diagram.
+/// </summary>
 public sealed class DiagramCoreTests
 {
+    /// <summary>
+    /// Проверяет что RectF.FromCenter корректно вычисляет центр прямоугольника.
+    /// </summary>
     [Fact]
     public void RectF_FromCenter_RoundTripsCenter()
     {
@@ -15,6 +21,9 @@ public sealed class DiagramCoreTests
         Assert.Equal(center.Y, r.Center.Y, 3);
     }
 
+    /// <summary>
+    /// Проверяет что центр Bounds ноды совпадает с её Position.
+    /// </summary>
     [Fact]
     public void RectNode_BoundsCenter_EqualsPosition()
     {
@@ -31,6 +40,10 @@ public sealed class DiagramCoreTests
         Assert.Equal(n.Position.Y, n.Bounds.Center.Y, 3);
     }
 
+    /// <summary>
+    /// Проверяет что AddPort с AutoDistributePorts=true автоматически распределяет
+    /// порты пропорционально по стороне ноды (0.25, 0.50, 0.75 для трёх портов).
+    /// </summary>
     [Fact]
     public void AddPort_AutoDistributesOffsets_Proportionally()
     {
@@ -52,6 +65,9 @@ public sealed class DiagramCoreTests
         Assert.Equal(0.75f, p3.Ref.Offset, 3);
     }
 
+    /// <summary>
+    /// Проверяет что единственный порт центрируется посередине стороны (offset=0.5).
+    /// </summary>
     [Fact]
     public void DistributeAllPortsProportionally_CentersSinglePort()
     {
@@ -67,6 +83,9 @@ public sealed class DiagramCoreTests
         Assert.Equal(0.5f, p.Ref.Offset, 3);
     }
 
+    /// <summary>
+    /// Проверяет что AddArc выбрасывает исключение если исходящий порт запрещён на стороне ноды.
+    /// </summary>
     [Fact]
     public void AddArc_Throws_WhenOutgoingForbiddenOnFromSide()
     {
@@ -89,6 +108,10 @@ public sealed class DiagramCoreTests
         Assert.Contains("forbids outgoing", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Проверяет что GetPortWorldPosition ограничивает offset в пределах стороны ноды.
+    /// Если offset > 1 или < 0, позиция порта не выходит за границы стороны.
+    /// </summary>
     [Fact]
     public void GetPortWorldPosition_ClampsOffsetToSideEndpoints()
     {
@@ -119,6 +142,10 @@ public sealed class DiagramCoreTests
         Assert.Equal((top + bottom) / 2f, pRightMid.Y, 3);
     }
 
+    /// <summary>
+    /// Проверяет что жёсткое минимальное расстояние (UseHardMinSpacing=true)
+    /// разводит две перекрывающиеся ноды так, что их расширенные границы не пересекаются.
+    /// </summary>
     [Fact]
     public void Step_WithHardMinSpacing_MakesExpandedBoundsNonIntersecting()
     {

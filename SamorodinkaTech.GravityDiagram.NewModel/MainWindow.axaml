@@ -1,0 +1,60 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:SamorodinkaTech.GravityDiagram.NewModel"
+        x:Class="SamorodinkaTech.GravityDiagram.NewModel.MainWindow"
+        Title="Новая модель"
+        Width="1200" Height="700">
+
+    <Grid ColumnDefinitions="240,*">
+        <Border Grid.Column="0" Background="#F5F5F5" Padding="12">
+            <ScrollViewer>
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Новая модель" FontWeight="Bold" FontSize="16" Margin="0,0,0,8"/>
+
+                    <TextBlock Text="Коэффициент отталкивания" FontSize="12"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider x:Name="RepulsionSlider" Width="160" Minimum="0" Maximum="500" TickFrequency="1" />
+                        <TextBlock x:Name="RepulsionValue" Width="60" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <TextBlock Text="Зона отталкивания" FontSize="12"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider x:Name="ZoneSlider" Width="160" Minimum="1" Maximum="300" TickFrequency="1" />
+                        <TextBlock x:Name="ZoneValue" Width="60" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <TextBlock Text="Коэффициент притяжения" FontSize="12"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider x:Name="AttractionSlider" Width="160" Minimum="0" Maximum="1" TickFrequency="0.005" />
+                        <TextBlock x:Name="AttractionValue" Width="60" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <TextBlock Text="Коэффициент трения" FontSize="12"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider x:Name="FrictionSlider" Width="160" Minimum="0" Maximum="10" TickFrequency="0.1" />
+                        <TextBlock x:Name="FrictionValue" Width="60" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <Separator Margin="0,8"/>
+
+                    <CheckBox x:Name="JitterCheck" Content="Случайный джитер" IsChecked="True"/>
+
+                    <TextBlock Text="Количество фигур" FontSize="12" Margin="0,8,0,0"/>
+                    <ComboBox x:Name="NodeCountSelector" SelectedIndex="0">
+                        <ComboBoxItem Content="5"/>
+                        <ComboBoxItem Content="4"/>
+                        <ComboBoxItem Content="3"/>
+                        <ComboBoxItem Content="2"/>
+                        <ComboBoxItem Content="1"/>
+                    </ComboBox>
+
+                    <Separator Margin="0,8"/>
+
+                    <Button x:Name="ResetButton" Content="Сброс" HorizontalAlignment="Stretch"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <local:ModelView Grid.Column="1" x:Name="ModelView"/>
+    </Grid>
+</Window>

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
@@ -20,10 +20,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SamorodinkaTech.GravityDiagram.Core\SamorodinkaTech.GravityDiagram.Core.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="TestData\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
