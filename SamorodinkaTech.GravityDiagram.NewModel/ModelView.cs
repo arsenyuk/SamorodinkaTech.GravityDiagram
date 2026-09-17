@@ -30,6 +30,11 @@ public sealed class ModelView : Control
     private static readonly Pen NodePen = new(NodeStroke, 2);
     private static readonly Brush ZoneBrush = new SolidColorBrush(Color.FromArgb(30, 74, 144, 217));
     private static readonly Pen ZonePen = new(new SolidColorBrush(Color.FromArgb(80, 74, 144, 217)), 1, new DashStyle([4, 4], 0));
+    private static readonly Brush Zone15Brush = new SolidColorBrush(Color.FromArgb(15, 74, 144, 217));
+    private static readonly Pen Zone15Pen = new(new SolidColorBrush(Color.FromArgb(40, 74, 144, 217)), 1, new DashStyle([2, 4], 0));
+    private static readonly Brush ZoneUBrush = new SolidColorBrush(Color.FromArgb(8, 200, 120, 60));
+    private static readonly Pen ZoneUPen = new(new SolidColorBrush(Color.FromArgb(25, 200, 120, 60)), 1, new DashStyle([6, 4], 0));
+    private static readonly Pen EdgePen = new(new SolidColorBrush(Color.Parse("#2C5F8A")), 2);
 
     private static FormattedText MakeText(string text, double fontSize, IBrush brush)
     {
@@ -42,6 +47,8 @@ public sealed class ModelView : Control
             brush);
     }
 
+    private static Point ToPoint(Vector2 v) => new(v.X, v.Y);
+
     public ModelView()
     {
         ClipToBounds = true;
@@ -53,13 +60,13 @@ public sealed class ModelView : Control
             (_, _) => Tick());
     }
 
-    public void SetNodeCount(int count)
+    public bool UseOrthogonalEdges = false;
+
+    public void LoadGraph()
     {
         var cx = (float)(Bounds.Width / 2);
         var cy = (float)(Bounds.Height / 2);
-        Model.Nodes.Clear();
-        foreach (var node in PhysicsModel.CreateDefaultNodes(count, cx, cy))
-            Model.Nodes.Add(node);
+        PhysicsModel.CreateGraphABC(Model, cx, cy);
         ResetSimulation();
     }
 
@@ -89,7 +96,7 @@ public sealed class ModelView : Control
         if (_firstSize && Bounds.Width > 0 && Bounds.Height > 0)
         {
             _firstSize = false;
-            SetNodeCount(5);
+            LoadGraph();
         }
         _timer.Start();
     }
@@ -127,14 +134,46 @@ public sealed class ModelView : Control
         {
             context.FillRectangle(Brushes.White, new Rect(Bounds.Size));
 
+            // Draw edges
+            foreach (var edge in Model.Edges)
+            {
+                var from = Model.Nodes[edge.From];
+                var to = Model.Nodes[edge.To];
+
+                // Determine port directions based on relative position
+                var p1 = from.Position.X <= to.Position.X
+                    ? from.PortRight : from.PortLeft;
+                var p2 = to.Position.X <= from.Position.X
+                    ? to.PortRight : to.PortLeft;
+
+                if (UseOrthogonalEdges)
+                {
+                    var mid = new Point(p2.X, p1.Y);
+                    context.DrawLine(EdgePen, ToPoint(p1), mid);
+                    context.DrawLine(EdgePen, mid, ToPoint(p2));
+                }
+                else
+                {
+                    context.DrawLine(EdgePen, ToPoint(p1), ToPoint(p2));
+                }
+            }
+
             foreach (var node in Model.Nodes)
             {
                 var center = new Point(node.Position.X, node.Position.Y);
 
-                // Draw repulsion zone (circle)
-                context.DrawEllipse(ZoneBrush, ZonePen, center, Model.RepulsionL, Model.RepulsionL);
+                // Zone 1: node radius (half diagonal)
+                var nodeRadius = MathF.Sqrt(node.Width * node.Width + node.Height * node.Height) / 2;
+                // Zone 2: +nodeRadius
+                var zone2 = 2 * nodeRadius;
+                // Zone 3: +nodeRadius
+                var zone3 = 3 * nodeRadius;
 
-                // Draw node (rectangle)
+                context.DrawEllipse(ZoneBrush, ZonePen, center, nodeRadius, nodeRadius);
+                context.DrawEllipse(Zone15Brush, Zone15Pen, center, zone2, zone2);
+                context.DrawEllipse(ZoneUBrush, ZoneUPen, center, zone3, zone3);
+
+                // Draw node rectangle
                 var rect = new Rect(
                     node.Position.X - node.Width / 2,
                     node.Position.Y - node.Height / 2,
@@ -146,6 +185,12 @@ public sealed class ModelView : Control
                 var textX = node.Position.X - ft.Width / 2;
                 var textY = node.Position.Y - ft.Height / 2;
                 context.DrawText(ft, new Point(textX, textY));
+
+                // Draw ports
+                var portBrush = new SolidColorBrush(Color.Parse("#2C5F8A"));
+                const float portR = 5;
+                context.DrawEllipse(portBrush, null, ToPoint(node.PortLeft), portR, portR);
+                context.DrawEllipse(portBrush, null, ToPoint(node.PortRight), portR, portR);
             }
         }
         catch (Exception ex)

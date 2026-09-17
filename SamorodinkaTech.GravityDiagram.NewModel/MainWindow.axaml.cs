@@ -1,11 +1,9 @@
 using Avalonia.Controls;
-using Avalonia.Interactivity;
 
 namespace SamorodinkaTech.GravityDiagram.NewModel;
 
 public partial class MainWindow : Window
 {
-    private int _currentNodeCount;
     private bool _initialized;
 
     public MainWindow()
@@ -25,8 +23,8 @@ public partial class MainWindow : Window
         BindSlider("RepulsionPSlider", "RepulsionPValue",
             () => model.RepulsionP, v => model.RepulsionP = v, "F0");
 
-        BindSlider("RepulsionLSlider", "RepulsionLValue",
-            () => model.RepulsionL, v => model.RepulsionL = v, "F0");
+        BindSlider("UniversalRepulsionSlider", "UniversalRepulsionValue",
+            () => model.UniversalRepulsionK, v => model.UniversalRepulsionK = v, "F1");
 
         BindSlider("AttractionSlider", "AttractionValue",
             () => model.AttractionK, v => model.AttractionK = v, "F3");
@@ -42,27 +40,17 @@ public partial class MainWindow : Window
             model.UseJitter = jitterCheck.IsChecked == true;
         };
 
-        // Node count selector
-        _currentNodeCount = 5;
-        var nodeCountSelector = this.FindControl<ComboBox>("NodeCountSelector")!;
-        nodeCountSelector.SelectionChanged += (_, e) =>
+        // Orthogonal edges checkbox
+        var orthogonalCheck = this.FindControl<CheckBox>("OrthogonalCheck")!;
+        orthogonalCheck.IsCheckedChanged += (_, _) =>
         {
             if (!_initialized) return;
-            if (nodeCountSelector.SelectedIndex < 0) return;
-            var count = 5 - nodeCountSelector.SelectedIndex;
-            if (count == _currentNodeCount) return;
-            _currentNodeCount = count;
-            ModelView.SetNodeCount(count);
+            ModelView.UseOrthogonalEdges = orthogonalCheck.IsChecked == true;
         };
 
         // Reset button
         var resetButton = this.FindControl<Button>("ResetButton")!;
-        resetButton.Click += (_, _) =>
-        {
-            var count = 5 - nodeCountSelector.SelectedIndex;
-            _currentNodeCount = count;
-            ModelView.SetNodeCount(count);
-        };
+        resetButton.Click += (_, _) => ModelView.LoadGraph();
     }
 
     private void BindSlider(string sliderName, string valueTextName,

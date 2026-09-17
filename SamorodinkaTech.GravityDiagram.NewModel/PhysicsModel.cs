@@ -12,6 +12,9 @@ public sealed class PhysicsNode
     public float Height = 80f;
     public string Label = "";
 
+    public Vector2 PortLeft => new(Position.X - Width / 2, Position.Y);
+    public Vector2 PortRight => new(Position.X + Width / 2, Position.Y);
+
     public PhysicsNode(string label, float x, float y)
     {
         Label = label;
@@ -19,13 +22,22 @@ public sealed class PhysicsNode
     }
 }
 
+public sealed class Edge
+{
+    public int From;
+    public int To;
+
+    public Edge(int from, int to) { From = from; To = to; }
+}
+
 public sealed class PhysicsModel
 {
     public readonly List<PhysicsNode> Nodes = [];
+    public readonly List<Edge> Edges = [];
 
-    public float RepulsionS = 500f;     // max repulsion force (at distance=0)
-    public float RepulsionP = 10f;      // repulsion force at zone edge (distance=l)
-    public float RepulsionL = 100f;     // repulsion zone size
+    public float RepulsionS = 500f;
+    public float RepulsionP = 10f;
+    public float UniversalRepulsionK = 10f;
     public float AttractionK = 0.01f;
     public float FrictionK = 0.99f;
     public bool UseJitter = true;
@@ -33,11 +45,21 @@ public sealed class PhysicsModel
     private const float MaxSpeed = 2000f;
     private static readonly Random Rng = new();
 
+    private bool AreConnected(int i, int j)
+    {
+        foreach (var e in Edges)
+        {
+            if ((e.From == i && e.To == j) || (e.From == j && e.To == i))
+                return true;
+        }
+        return false;
+    }
+
     public void Step(float dt)
     {
         var forces = new Vector2[Nodes.Count];
 
-        // Step 1: Compute jittered (virtual) positions for force calculation
+        // Step 1: Compute jittered (virtual) positions
         var virtualPositions = new Vector2[Nodes.Count];
         for (var i = 0; i < Nodes.Count; i++)
         {
@@ -50,9 +72,7 @@ public sealed class PhysicsModel
             }
         }
 
-        // Step 2: Pairwise forces based on virtual positions
-        var slopeK = RepulsionL > 0.001f ? (RepulsionS - RepulsionP) / (2f * RepulsionL) : 0f;
-
+        // Step 2: Pairwise forces
         for (var i = 0; i < Nodes.Count; i++)
         {
             for (var j = i + 1; j < Nodes.Count; j++)
@@ -64,35 +84,48 @@ public sealed class PhysicsModel
 
                 var direction = delta / distance;
 
-                // Linear attraction (always active)
+                // Linear attraction
                 var attraction = direction * (AttractionK * distance);
 
-                // Linear repulsion: f(x) = S - k*x, active within 2*l from center
+                // Linear repulsion: f(x) = S - k*x
+                var connected = AreConnected(i, j);
+                var rI = MathF.Sqrt(Nodes[i].Width * Nodes[i].Width + Nodes[i].Height * Nodes[i].Height) / 2;
+                var rJ = MathF.Sqrt(Nodes[j].Width * Nodes[j].Width + Nodes[j].Height * Nodes[j].Height) / 2;
+                var nodeRadius = Math.Max(rI, rJ);
+                var zoneL = connected ? nodeRadius : 2 * nodeRadius;
+                var activeZone = 2f * zoneL;
+                var slopeK = zoneL > 0.001f ? (RepulsionS - RepulsionP) / activeZone : 0f;
+
                 Vector2 repulsion = Vector2.Zero;
-                var activeZone = 2f * RepulsionL;
                 if (distance <= activeZone)
                 {
                     var force = RepulsionS - slopeK * distance;
                     repulsion = -direction * force;
                 }
 
-                var pairForce = attraction + repulsion;
+                // Universal repulsion (only unconnected pairs)
+                var universalZone = 3 * nodeRadius;
+                Vector2 universalRepulsion = Vector2.Zero;
+                if (!connected && distance <= universalZone)
+                {
+                    universalRepulsion = -direction * (UniversalRepulsionK * (universalZone - distance));
+                }
+
+                var pairForce = attraction + repulsion + universalRepulsion;
                 forces[i] += pairForce;
                 forces[j] -= pairForce;
             }
         }
 
-        // Step 3: Integrate using real positions and computed forces
+        // Step 3: Integrate
         for (var i = 0; i < Nodes.Count; i++)
         {
             var friction = -FrictionK * Nodes[i].Velocity;
             var totalForce = forces[i] + friction;
 
-            // F = ma, mass = 1
             var acceleration = totalForce;
             Nodes[i].Velocity += acceleration * dt;
 
-            // Clamp speed
             var speed = Nodes[i].Velocity.Length();
             if (speed > MaxSpeed)
                 Nodes[i].Velocity = Nodes[i].Velocity / speed * MaxSpeed;
@@ -107,11 +140,41 @@ public sealed class PhysicsModel
             Nodes[i].Velocity = Vector2.Zero;
     }
 
-    public static List<PhysicsNode> CreateDefaultNodes(int count, float cx, float cy)
+    public static void CreateGraphABC(PhysicsModel model, float cx, float cy)
     {
-        var nodes = new List<PhysicsNode>(count);
+        model.Nodes.Clear();
+        model.Edges.Clear();
+
+        var a = new PhysicsNode("A", cx - 200, cy);
+        var b = new PhysicsNode("B", cx, cy) { Width = 320f, Height = 160f };
+        var c = new PhysicsNode("C", cx + 200, cy);
+
+        model.Nodes.Add(a);
+        model.Nodes.Add(b);
+        model.Nodes.Add(c);
+
+        model.Edges.Add(new Edge(0, 1));
+        model.Edges.Add(new Edge(1, 2));
+    }
+
+    public static void CreateFullyConnected(PhysicsModel model, float cx, float cy, int count)
+    {
+        model.Nodes.Clear();
+        model.Edges.Clear();
+
+        var labels = new[] { "A", "B", "C", "D", "E", "F" };
+        var radius = 100f + count * 20;
+
         for (var i = 0; i < count; i++)
-            nodes.Add(new PhysicsNode((i + 1).ToString(), cx, cy));
-        return nodes;
+        {
+            var angle = 2 * MathF.PI * i / count - MathF.PI / 2;
+            var x = cx + radius * MathF.Cos(angle);
+            var y = cy + radius * MathF.Sin(angle);
+            model.Nodes.Add(new PhysicsNode(labels[i], x, y));
+        }
+
+        for (var i = 0; i < count; i++)
+            for (var j = i + 1; j < count; j++)
+                model.Edges.Add(new Edge(i, j));
     }
 }

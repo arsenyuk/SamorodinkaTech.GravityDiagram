@@ -23,10 +23,10 @@
                         <TextBlock x:Name="RepulsionPValue" Width="60" VerticalAlignment="Center"/>
                     </StackPanel>
 
-                    <TextBlock Text="l — зона отталкивания" FontSize="12"/>
+                    <TextBlock Text="Сила отталкивания (все ноды)" FontSize="12"/>
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Slider x:Name="RepulsionLSlider" Width="160" Minimum="1" Maximum="300" TickFrequency="1" />
-                        <TextBlock x:Name="RepulsionLValue" Width="60" VerticalAlignment="Center"/>
+                        <Slider x:Name="UniversalRepulsionSlider" Width="160" Minimum="0" Maximum="100" TickFrequency="0.5" />
+                        <TextBlock x:Name="UniversalRepulsionValue" Width="60" VerticalAlignment="Center"/>
                     </StackPanel>
 
                     <TextBlock Text="Коэффициент притяжения" FontSize="12"/>
@@ -45,14 +45,7 @@
 
                     <CheckBox x:Name="JitterCheck" Content="Случайный джитер" IsChecked="True"/>
 
-                    <TextBlock Text="Количество фигур" FontSize="12" Margin="0,8,0,0"/>
-                    <ComboBox x:Name="NodeCountSelector" SelectedIndex="0">
-                        <ComboBoxItem Content="5"/>
-                        <ComboBoxItem Content="4"/>
-                        <ComboBoxItem Content="3"/>
-                        <ComboBoxItem Content="2"/>
-                        <ComboBoxItem Content="1"/>
-                    </ComboBox>
+                    <CheckBox x:Name="OrthogonalCheck" Content="Ортогональные дуги"/>
 
                     <Separator Margin="0,8"/>
 
