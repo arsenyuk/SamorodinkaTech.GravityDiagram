@@ -38,7 +38,7 @@ public sealed class PhysicsModel
     public float RepulsionS = 500f;
     public float RepulsionP = 10f;
     public float UniversalRepulsionK = 10f;
-    public float AttractionK = 0.01f;
+    public float AttractionK = 0.001f;
     public float FrictionK = 0.99f;
     public bool UseJitter = true;
 
@@ -53,6 +53,30 @@ public sealed class PhysicsModel
                 return true;
         }
         return false;
+    }
+
+    private float NodeRadius(int i)
+    {
+        var n = Nodes[i];
+        return MathF.Sqrt(n.Width * n.Width + n.Height * n.Height) / 2;
+    }
+
+    private float Zone3Radius(int nodeIdx)
+    {
+        // Max Zone 2 (2×r) of all connected neighbors
+        var maxZ2 = 0f;
+        foreach (var e in Edges)
+        {
+            var neighbor = -1;
+            if (e.From == nodeIdx) neighbor = e.To;
+            else if (e.To == nodeIdx) neighbor = e.From;
+            if (neighbor >= 0)
+            {
+                var z2 = 2 * NodeRadius(neighbor);
+                if (z2 > maxZ2) maxZ2 = z2;
+            }
+        }
+        return maxZ2;
     }
 
     public void Step(float dt)
@@ -87,12 +111,11 @@ public sealed class PhysicsModel
                 // Linear attraction
                 var attraction = direction * (AttractionK * distance);
 
-                // Linear repulsion: f(x) = S - k*x
+                // Linear repulsion: Zone 1 (own radius) for all, Zone 2 (2×min) for connected
                 var connected = AreConnected(i, j);
-                var rI = MathF.Sqrt(Nodes[i].Width * Nodes[i].Width + Nodes[i].Height * Nodes[i].Height) / 2;
-                var rJ = MathF.Sqrt(Nodes[j].Width * Nodes[j].Width + Nodes[j].Height * Nodes[j].Height) / 2;
-                var nodeRadius = Math.Max(rI, rJ);
-                var zoneL = connected ? nodeRadius : 2 * nodeRadius;
+                var rI = NodeRadius(i);
+                var rJ = NodeRadius(j);
+                var zoneL = connected ? 2 * Math.Min(rI, rJ) + 0.02f : Math.Max(Zone3Radius(i), Zone3Radius(j));
                 var activeZone = 2f * zoneL;
                 var slopeK = zoneL > 0.001f ? (RepulsionS - RepulsionP) / activeZone : 0f;
 
@@ -103,15 +126,7 @@ public sealed class PhysicsModel
                     repulsion = -direction * force;
                 }
 
-                // Universal repulsion (only unconnected pairs)
-                var universalZone = 3 * nodeRadius;
-                Vector2 universalRepulsion = Vector2.Zero;
-                if (!connected && distance <= universalZone)
-                {
-                    universalRepulsion = -direction * (UniversalRepulsionK * (universalZone - distance));
-                }
-
-                var pairForce = attraction + repulsion + universalRepulsion;
+                var pairForce = attraction + repulsion;
                 forces[i] += pairForce;
                 forces[j] -= pairForce;
             }
@@ -141,6 +156,23 @@ public sealed class PhysicsModel
     }
 
     public static void CreateGraphABC(PhysicsModel model, float cx, float cy)
+    {
+        model.Nodes.Clear();
+        model.Edges.Clear();
+
+        var a = new PhysicsNode("A", cx - 200, cy) { Width = 320f, Height = 160f };
+        var b = new PhysicsNode("B", cx, cy);
+        var c = new PhysicsNode("C", cx + 200, cy);
+
+        model.Nodes.Add(a);
+        model.Nodes.Add(b);
+        model.Nodes.Add(c);
+
+        model.Edges.Add(new Edge(0, 1));
+        model.Edges.Add(new Edge(1, 2));
+    }
+
+    public static void CreateGraphABCSmall(PhysicsModel model, float cx, float cy)
     {
         model.Nodes.Clear();
         model.Edges.Clear();

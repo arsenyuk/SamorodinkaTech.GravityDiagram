@@ -47,6 +47,12 @@
 
                     <CheckBox x:Name="OrthogonalCheck" Content="Ортогональные дуги"/>
 
+                    <TextBlock Text="Пример графа" FontSize="12" Margin="0,8,0,0"/>
+                    <ComboBox x:Name="GraphSelector" SelectedIndex="0">
+                        <ComboBoxItem Content="A(big) → B → C"/>
+                        <ComboBoxItem Content="A → B(big) → C"/>
+                    </ComboBox>
+
                     <Separator Margin="0,8"/>
 
                     <Button x:Name="ResetButton" Content="Сброс" HorizontalAlignment="Stretch"/>

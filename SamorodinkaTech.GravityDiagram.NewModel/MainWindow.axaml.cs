@@ -48,9 +48,21 @@ public partial class MainWindow : Window
             ModelView.UseOrthogonalEdges = orthogonalCheck.IsChecked == true;
         };
 
+        // Graph selector
+        var graphSelector = this.FindControl<ComboBox>("GraphSelector")!;
+        graphSelector.SelectionChanged += (_, _) =>
+        {
+            if (!_initialized) return;
+            ModelView.LoadGraph(graphSelector.SelectedIndex);
+        };
+
         // Reset button
         var resetButton = this.FindControl<Button>("ResetButton")!;
-        resetButton.Click += (_, _) => ModelView.LoadGraph();
+        resetButton.Click += (_, _) =>
+        {
+            var idx = this.FindControl<ComboBox>("GraphSelector")!.SelectedIndex;
+            ModelView.LoadGraph(idx);
+        };
     }
 
     private void BindSlider(string sliderName, string valueTextName,

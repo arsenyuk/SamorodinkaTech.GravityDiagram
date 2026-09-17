@@ -62,11 +62,14 @@ public sealed class ModelView : Control
 
     public bool UseOrthogonalEdges = false;
 
-    public void LoadGraph()
+    public void LoadGraph(int index = 0)
     {
         var cx = (float)(Bounds.Width / 2);
         var cy = (float)(Bounds.Height / 2);
-        PhysicsModel.CreateGraphABC(Model, cx, cy);
+        if (index == 0)
+            PhysicsModel.CreateGraphABC(Model, cx, cy);
+        else
+            PhysicsModel.CreateGraphABCSmall(Model, cx, cy);
         ResetSimulation();
     }
 
@@ -162,16 +165,31 @@ public sealed class ModelView : Control
             {
                 var center = new Point(node.Position.X, node.Position.Y);
 
-                // Zone 1: node radius (half diagonal)
+                // Zone 1: own radius
                 var nodeRadius = MathF.Sqrt(node.Width * node.Width + node.Height * node.Height) / 2;
-                // Zone 2: +nodeRadius
-                var zone2 = 2 * nodeRadius;
-                // Zone 3: +nodeRadius
-                var zone3 = 3 * nodeRadius;
-
                 context.DrawEllipse(ZoneBrush, ZonePen, center, nodeRadius, nodeRadius);
-                context.DrawEllipse(Zone15Brush, Zone15Pen, center, zone2, zone2);
-                context.DrawEllipse(ZoneUBrush, ZoneUPen, center, zone3, zone3);
+
+                // Zone 2: 2 × own radius
+                context.DrawEllipse(Zone15Brush, Zone15Pen, center, 2 * nodeRadius, 2 * nodeRadius);
+
+                // Zone 3: max Zone 2 of connected neighbors
+                var nodeIdx = Model.Nodes.IndexOf(node);
+                var zone3 = 0f;
+                foreach (var e in Model.Edges)
+                {
+                    var neighbor = -1;
+                    if (e.From == nodeIdx) neighbor = e.To;
+                    else if (e.To == nodeIdx) neighbor = e.From;
+                    if (neighbor >= 0)
+                    {
+                        var n = Model.Nodes[neighbor];
+                        var nr = MathF.Sqrt(n.Width * n.Width + n.Height * n.Height) / 2;
+                        var z2 = 2 * nr;
+                        if (z2 > zone3) zone3 = z2;
+                    }
+                }
+                if (zone3 > 0)
+                    context.DrawEllipse(ZoneUBrush, ZoneUPen, center, zone3, zone3);
 
                 // Draw node rectangle
                 var rect = new Rect(
