@@ -39,7 +39,8 @@ public sealed record DumpNode(
 	DumpVec2 Position,
 	DumpVec2 Velocity,
 	float Width,
-	float Height);
+	float Height,
+	DumpVec2? LastMovementDelta = null);
 
 public sealed record DumpPort(
 	string Id,

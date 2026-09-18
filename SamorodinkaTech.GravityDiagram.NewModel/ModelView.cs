@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
 using Avalonia;
@@ -20,6 +21,8 @@ public sealed class ModelView : Control
     private const float SimSpeed = 60f;
     private const float MaxSubstepDt = 1f / 60f;
     private const int MaxSubstepsPerTick = 240;
+    private const int TimerIntervalMs = 16;
+    private const double LabelFontSize = 14;
 
     // Drag state
     private PhysicsNode? _dragNode;
@@ -49,18 +52,19 @@ public sealed class ModelView : Control
 
     private static Point ToPoint(Vector2 v) => new(v.X, v.Y);
 
+
     public ModelView()
     {
         ClipToBounds = true;
 
         _lastTickAt = DateTime.UtcNow;
         _timer = new DispatcherTimer(
-            TimeSpan.FromMilliseconds(16),
+            TimeSpan.FromMilliseconds(TimerIntervalMs),
             DispatcherPriority.Render,
             (_, _) => Tick());
     }
 
-    public bool UseOrthogonalEdges = false;
+    public bool UseOrthogonalEdges = true;
 
     public void LoadGraph(int index = 0)
     {
@@ -70,6 +74,23 @@ public sealed class ModelView : Control
             PhysicsModel.CreateGraphABC(Model, cx, cy);
         else
             PhysicsModel.CreateGraphABCSmall(Model, cx, cy);
+
+        // Вычисляем маршруты один раз и сохраняем в Arcs
+        Model.Arcs.Clear();
+        if (UseOrthogonalEdges)
+        {
+            foreach (var edge in Model.Edges)
+            {
+                var fromIdx = Model.Nodes.IndexOf(edge.From.Node);
+                var toIdx = Model.Nodes.IndexOf(edge.To.Node);
+                var p1 = edge.From.GetWorldPosition();
+                var p2 = edge.To.GetWorldPosition();
+                var route = OrthogonalRouter.ComputeRoute(
+                    p1, p2, fromIdx, toIdx, Model.Nodes);
+                Model.Arcs.Add(new Arc(edge) { Points = route });
+            }
+        }
+
         ResetSimulation();
     }
 
@@ -78,6 +99,92 @@ public sealed class ModelView : Control
         Model.ResetVelocities();
         _lastTickAt = DateTime.UtcNow;
         _timer.Start();
+    }
+
+    /// <summary>
+    /// Пересчитывает все ортогональные дуги заново на основе текущих позиций нод.
+    /// </summary>
+    private void RecomputeArcs()
+    {
+        Model.Arcs.Clear();
+        if (!UseOrthogonalEdges) return;
+
+        foreach (var edge in Model.Edges)
+        {
+            var fromIdx = Model.Nodes.IndexOf(edge.From.Node);
+            var toIdx = Model.Nodes.IndexOf(edge.To.Node);
+            var p1 = edge.From.GetWorldPosition();
+            var p2 = edge.To.GetWorldPosition();
+            var route = OrthogonalRouter.ComputeRoute(
+                p1, p2, fromIdx, toIdx, Model.Nodes);
+            Model.Arcs.Add(new Arc(edge) { Points = route });
+        }
+    }
+
+    /// <summary>
+    /// Корректирует зафиксированные дуги после перемещения нод.
+    /// Правила:
+    /// 1. Первый сегмент идёт из порта в Zone 1 узла → сдвинуть дугу на 1px perpendicular + новый сегмент к порту
+    /// 2. Сегмент нулевой длины → удалить точку
+    /// 3. Коллинеарные сегменты в одну сторону → сдвинуть общую точку
+    /// </summary>
+    public void AdjustArcs()
+    {
+        for (var i = 0; i < Model.Arcs.Count; i++)
+        {
+            var arc = Model.Arcs[i];
+            var edge = Model.Edges[i];
+            var points = arc.Points;
+            if (points.Count < 2) continue;
+
+            // Правило 2: удаление сегментов нулевой длины
+            for (var k = points.Count - 2; k >= 0; k--)
+            {
+                if (Vector2.Distance(points[k], points[k + 1]) < 1f)
+                    points.RemoveAt(k + 1);
+            }
+
+            if (points.Count < 2) continue;
+
+            // Восстанавливаем L-точку если потеряна
+            if (points.Count == 2 && Math.Abs(points[0].Y - points[1].Y) > OrthogonalRouter.AxisTolerance)
+            {
+                points.Insert(1, new Vector2(points[1].X, points[0].Y));
+            }
+
+            if (points.Count < 3) continue;
+
+            // Правило 1: первый сегмент идёт из порта в Zone 1
+            var fromNode = edge.From.Node;
+            var port = fromNode.PortRight;
+
+            var fromRect = new RectF(
+                fromNode.Position.X - fromNode.Width / 2,
+                fromNode.Position.Y - fromNode.Height / 2,
+                fromNode.Width,
+                fromNode.Height);
+
+            // Проверяем: точка[1] (первый拐角) внутри Zone 1?
+            var corner = points[1];
+            if (fromRect.Contains(corner))
+            {
+                // Сдвигаем拐角 perpendicular к первому сегменту
+                var dx = corner.X - points[0].X;
+                var dy = corner.Y - points[0].Y;
+                Vector2 perp;
+                if (Math.Abs(dx) > Math.Abs(dy))
+                    perp = new Vector2(0, dy > 0 ? -1 : 1); // горизонтальный →垂直ный сдвиг
+                else
+                    perp = new Vector2(dx > 0 ? -1 : 1, 0); // вертикальный → горизонтальный сдвиг
+
+                // Сдвигаем拐角 и все последующие точки
+                for (var k = 1; k < points.Count; k++)
+                    points[k] += perp;
+
+                // Добавляем новый сегмент от порта к сдвинутой точке
+                points.Insert(0, port);
+            }
+        }
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -123,6 +230,9 @@ public sealed class ModelView : Control
             for (var i = 0; i < steps; i++)
                 Model.Step(subDt);
 
+            // Пересчитываем дуги на основе текущих позиций портов
+            RecomputeArcs();
+
             InvalidateVisual();
         }
         catch (Exception ex)
@@ -133,35 +243,37 @@ public sealed class ModelView : Control
 
     public override void Render(DrawingContext context)
     {
-        try
+        context.FillRectangle(Brushes.White, new Rect(Bounds.Size));
+
+        // Draw edges
+        if (Model.Arcs.Count > 0)
         {
-            context.FillRectangle(Brushes.White, new Rect(Bounds.Size));
-
-            // Draw edges
-            foreach (var edge in Model.Edges)
+            // Ортогональные дуги из зафиксированных маршрутов
+            foreach (var arc in Model.Arcs)
             {
-                var from = Model.Nodes[edge.From];
-                var to = Model.Nodes[edge.To];
-
-                // Determine port directions based on relative position
-                var p1 = from.Position.X <= to.Position.X
-                    ? from.PortRight : from.PortLeft;
-                var p2 = to.Position.X <= from.Position.X
-                    ? to.PortRight : to.PortLeft;
-
-                if (UseOrthogonalEdges)
+                try
                 {
-                    var mid = new Point(p2.X, p1.Y);
-                    context.DrawLine(EdgePen, ToPoint(p1), mid);
-                    context.DrawLine(EdgePen, mid, ToPoint(p2));
+                    if (arc.Points.Count < 2) continue;
+
+                    for (var k = 0; k < arc.Points.Count - 1; k++)
+                        context.DrawLine(EdgePen, ToPoint(arc.Points[k]), ToPoint(arc.Points[k + 1]));
                 }
-                else
+                catch (Exception ex)
                 {
-                    context.DrawLine(EdgePen, ToPoint(p1), ToPoint(p2));
+                    Console.Error.WriteLine($"[Render] Arc: {ex.Message}");
                 }
             }
+        }
+        else
+        {
+            // Прямые линии (не-ортогональный режим)
+            foreach (var edge in Model.Edges)
+            {
+                context.DrawLine(EdgePen, ToPoint(edge.From.GetWorldPosition()), ToPoint(edge.To.GetWorldPosition()));
+            }
+        }
 
-            foreach (var node in Model.Nodes)
+        foreach (var node in Model.Nodes)
             {
                 var center = new Point(node.Position.X, node.Position.Y);
 
@@ -178,8 +290,10 @@ public sealed class ModelView : Control
                 foreach (var e in Model.Edges)
                 {
                     var neighbor = -1;
-                    if (e.From == nodeIdx) neighbor = e.To;
-                    else if (e.To == nodeIdx) neighbor = e.From;
+                    var ei = Model.Nodes.IndexOf(e.From.Node);
+                    var ej = Model.Nodes.IndexOf(e.To.Node);
+                    if (ei == nodeIdx) neighbor = ej;
+                    else if (ej == nodeIdx) neighbor = ei;
                     if (neighbor >= 0)
                     {
                         var n = Model.Nodes[neighbor];
@@ -199,7 +313,7 @@ public sealed class ModelView : Control
                     node.Height);
                 context.DrawRectangle(null, NodePen, rect, 8);
 
-                var ft = MakeText(node.Label, 14, NodeStroke);
+                var ft = MakeText(node.Label, LabelFontSize, NodeStroke);
                 var textX = node.Position.X - ft.Width / 2;
                 var textY = node.Position.Y - ft.Height / 2;
                 context.DrawText(ft, new Point(textX, textY));
@@ -210,11 +324,6 @@ public sealed class ModelView : Control
                 context.DrawEllipse(portBrush, null, ToPoint(node.PortLeft), portR, portR);
                 context.DrawEllipse(portBrush, null, ToPoint(node.PortRight), portR, portR);
             }
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[Render] {ex}");
-        }
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
@@ -252,6 +361,9 @@ public sealed class ModelView : Control
             (float)pos.X + _dragOffset.X,
             (float)pos.Y + _dragOffset.Y);
         _dragNode.Velocity = Vector2.Zero;
+
+        // Пересчитываем дуги при перетаскивании ноды
+        RecomputeArcs();
 
         InvalidateVisual();
     }

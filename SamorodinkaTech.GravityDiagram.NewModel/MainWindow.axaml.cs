@@ -17,22 +17,26 @@ public partial class MainWindow : Window
     {
         var model = ModelView.Model;
 
+        // Params toggle
+        var paramsToggle = this.FindControl<Button>("ParamsToggle")!;
+        var paramsPanel = this.FindControl<StackPanel>("ParamsPanel")!;
+        paramsToggle.Click += (_, _) =>
+        {
+            paramsPanel.IsVisible = !paramsPanel.IsVisible;
+            paramsToggle.Content = paramsPanel.IsVisible ? "Скрыть параметры" : "Параметры модели";
+        };
+
+        // Parameter sliders
         BindSlider("RepulsionSSlider", "RepulsionSValue",
             () => model.RepulsionS, v => model.RepulsionS = v, "F0");
-
         BindSlider("RepulsionPSlider", "RepulsionPValue",
             () => model.RepulsionP, v => model.RepulsionP = v, "F0");
-
-        BindSlider("UniversalRepulsionSlider", "UniversalRepulsionValue",
-            () => model.UniversalRepulsionK, v => model.UniversalRepulsionK = v, "F1");
-
         BindSlider("AttractionSlider", "AttractionValue",
             () => model.AttractionK, v => model.AttractionK = v, "F3");
-
         BindSlider("FrictionSlider", "FrictionValue",
             () => model.FrictionK, v => model.FrictionK = v, "F2");
 
-        // Random Jitter checkbox
+        // Checkboxes
         var jitterCheck = this.FindControl<CheckBox>("JitterCheck")!;
         jitterCheck.IsCheckedChanged += (_, _) =>
         {
@@ -40,7 +44,6 @@ public partial class MainWindow : Window
             model.UseJitter = jitterCheck.IsChecked == true;
         };
 
-        // Orthogonal edges checkbox
         var orthogonalCheck = this.FindControl<CheckBox>("OrthogonalCheck")!;
         orthogonalCheck.IsCheckedChanged += (_, _) =>
         {

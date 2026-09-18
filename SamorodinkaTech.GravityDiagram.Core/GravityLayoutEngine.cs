@@ -300,21 +300,6 @@ public sealed class GravityLayoutEngine
 			nodeIndexById[nodes[i].Id] = i;
 		}
 
-		// Cache arc endpoint positions before node integration.
-		var endpointsBefore = new Dictionary<DiagramId, (Vector2 Start, Vector2 End)>(diagram.Arcs.Count);
-		for (var ai = 0; ai < diagram.Arcs.Count; ai++)
-		{
-			var arc = diagram.Arcs[ai];
-			var fromPort = diagram.TryGetPort(arc.FromPortId);
-			var toPort = diagram.TryGetPort(arc.ToPortId);
-			if (fromPort is null || toPort is null) continue;
-			if (!nodeIndexById.TryGetValue(fromPort.Ref.NodeId, out var ia)) continue;
-			if (!nodeIndexById.TryGetValue(toPort.Ref.NodeId, out var ib)) continue;
-			var start = GetPortWorldPosition(nodes[ia], fromPort.Ref);
-			var end = GetPortWorldPosition(nodes[ib], toPort.Ref);
-			endpointsBefore[arc.Id] = (start, end);
-		}
-
 		ComputeForces(diagram, nodes, nodeIndexById, forces, arcPointEndpoint: arcPointEndpoint);
 
 		// Prevent global drift (see PreviewStep comment).
@@ -333,8 +318,17 @@ public sealed class GravityLayoutEngine
 			_lastForcesByNodeId[nodes[i].Id] = forces[i];
 		}
 
+		// Cache positions before integration to compute movement deltas.
+		var positionsBefore = new Vector2[nodes.Count];
+		for (var i = 0; i < nodes.Count; i++)
+			positionsBefore[i] = nodes[i].Position;
+
 		Integrate(nodes, forces, dt);
 		ApplyHardMinSpacing(nodes);
+
+		// Store movement delta on each node for easy use in port/arc recalculation.
+		for (var i = 0; i < nodes.Count; i++)
+			nodes[i].LastMovementDelta = nodes[i].Position - positionsBefore[i];
 
 		// Nodes moved after arc points were stepped; keep internal points consistent with updated endpoints.
 		// Without this, a tiny segment can appear near ports due to endpoint motion.
@@ -344,33 +338,44 @@ public sealed class GravityLayoutEngine
 			var internalPoints = arc.InternalPoints;
 			if (internalPoints.Count == 0) continue;
 
-			if (!endpointsBefore.TryGetValue(arc.Id, out var before))
-				continue;
-
 			var fromPort = diagram.TryGetPort(arc.FromPortId);
 			var toPort = diagram.TryGetPort(arc.ToPortId);
 			if (fromPort is null || toPort is null) continue;
 			if (!nodeIndexById.TryGetValue(fromPort.Ref.NodeId, out var ia)) continue;
 			if (!nodeIndexById.TryGetValue(toPort.Ref.NodeId, out var ib)) continue;
 
-			var startAfter = GetPortWorldPosition(nodes[ia], fromPort.Ref);
-			var endAfter = GetPortWorldPosition(nodes[ib], toPort.Ref);
-			var deltaStart = startAfter - before.Start;
-			var deltaEnd = endAfter - before.End;
+			var deltaStart = nodes[ia].LastMovementDelta;
+			var deltaEnd = nodes[ib].LastMovementDelta;
 
 			if (deltaStart.LengthSquared() < 0.000001f && deltaEnd.LengthSquared() < 0.000001f)
 			{
-				CleanupEndpointTails(internalPoints, startAfter, endAfter);
+				var startCur = GetPortWorldPosition(nodes[ia], fromPort.Ref);
+				var endCur = GetPortWorldPosition(nodes[ib], toPort.Ref);
+				CleanupEndpointTails(internalPoints, startCur, endCur);
 				continue;
 			}
 
-			var n = internalPoints.Count;
-			for (var i = 0; i < n; i++)
+			// Shift internal points using LastMovementDelta: full shift at endpoints,
+			// decreasing weight toward the middle. The polyline body stays stable
+			// while first/last segments track their ports.
+			var count = internalPoints.Count;
+			if (count == 1)
 			{
-				var t = (i + 1f) / (n + 1f);
-				internalPoints[i] += deltaStart * (1f - t) + deltaEnd * t;
+				internalPoints[0] += (deltaStart + deltaEnd) * 0.5f;
+			}
+			else
+			{
+				var span = count - 1;
+				for (var i = 0; i < count; i++)
+				{
+					var tEnd = (float)(span - i) / span;
+					var tStart = (float)i / span;
+					internalPoints[i] += deltaStart * tEnd + deltaEnd * tStart;
+				}
 			}
 
+			var startAfter = GetPortWorldPosition(nodes[ia], fromPort.Ref);
+			var endAfter = GetPortWorldPosition(nodes[ib], toPort.Ref);
 			RepairArcAgainstNodes(arc, nodes, ia, ib, startAfter, endAfter, GetArcPointClearance(), Math.Clamp(_settings.MaxArcInternalPoints, 0, 512));
 			EnsureOrthogonalInternalPoints(internalPoints, nodes);
 			CleanupEndpointTails(internalPoints, startAfter, endAfter);

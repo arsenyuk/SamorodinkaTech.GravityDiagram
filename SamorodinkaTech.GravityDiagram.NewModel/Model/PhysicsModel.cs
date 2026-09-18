@@ -4,36 +4,17 @@ using System.Numerics;
 
 namespace SamorodinkaTech.GravityDiagram.NewModel;
 
-public sealed class PhysicsNode
-{
-    public Vector2 Position;
-    public Vector2 Velocity;
-    public float Width = 160f;
-    public float Height = 80f;
-    public string Label = "";
-
-    public Vector2 PortLeft => new(Position.X - Width / 2, Position.Y);
-    public Vector2 PortRight => new(Position.X + Width / 2, Position.Y);
-
-    public PhysicsNode(string label, float x, float y)
-    {
-        Label = label;
-        Position = new Vector2(x, y);
-    }
-}
-
-public sealed class Edge
-{
-    public int From;
-    public int To;
-
-    public Edge(int from, int to) { From = from; To = to; }
-}
-
 public sealed class PhysicsModel
 {
     public readonly List<PhysicsNode> Nodes = [];
     public readonly List<Edge> Edges = [];
+    public readonly List<Arc> Arcs = [];
+
+    // Sample graph layout constants
+    private const float BigNodeWidth = 320f;
+    private const float BigNodeHeight = 160f;
+    private const float BigNodeOffset = 350f;
+    private const float SmallNodeOffset = 200f;
 
     public float RepulsionS = 500f;
     public float RepulsionP = 10f;
@@ -43,13 +24,16 @@ public sealed class PhysicsModel
     public bool UseJitter = true;
 
     private const float MaxSpeed = 2000f;
+    private const float MinDistance = 0.001f;
     private static readonly Random Rng = new();
 
     private bool AreConnected(int i, int j)
     {
         foreach (var e in Edges)
         {
-            if ((e.From == i && e.To == j) || (e.From == j && e.To == i))
+            var ei = Nodes.IndexOf(e.From.Node);
+            var ej = Nodes.IndexOf(e.To.Node);
+            if ((ei == i && ej == j) || (ei == j && ej == i))
                 return true;
         }
         return false;
@@ -63,13 +47,14 @@ public sealed class PhysicsModel
 
     private float Zone3Radius(int nodeIdx)
     {
-        // Max Zone 2 (2×r) of all connected neighbors
         var maxZ2 = 0f;
         foreach (var e in Edges)
         {
+            var ei = Nodes.IndexOf(e.From.Node);
+            var ej = Nodes.IndexOf(e.To.Node);
             var neighbor = -1;
-            if (e.From == nodeIdx) neighbor = e.To;
-            else if (e.To == nodeIdx) neighbor = e.From;
+            if (ei == nodeIdx) neighbor = ej;
+            else if (ej == nodeIdx) neighbor = ei;
             if (neighbor >= 0)
             {
                 var z2 = 2 * NodeRadius(neighbor);
@@ -83,7 +68,6 @@ public sealed class PhysicsModel
     {
         var forces = new Vector2[Nodes.Count];
 
-        // Step 1: Compute jittered (virtual) positions
         var virtualPositions = new Vector2[Nodes.Count];
         for (var i = 0; i < Nodes.Count; i++)
         {
@@ -96,7 +80,6 @@ public sealed class PhysicsModel
             }
         }
 
-        // Step 2: Pairwise forces
         for (var i = 0; i < Nodes.Count; i++)
         {
             for (var j = i + 1; j < Nodes.Count; j++)
@@ -104,27 +87,20 @@ public sealed class PhysicsModel
                 var delta = virtualPositions[j] - virtualPositions[i];
                 var distance = delta.Length();
 
-                if (distance < 0.001f) continue;
+                if (distance < MinDistance) continue;
 
                 var direction = delta / distance;
-
-                // Linear attraction
                 var attraction = direction * (AttractionK * distance);
 
-                // Linear repulsion: Zone 1 (own radius) for all, Zone 2 (2×min) for connected
                 var connected = AreConnected(i, j);
                 var rI = NodeRadius(i);
                 var rJ = NodeRadius(j);
                 var zoneL = connected ? 2 * Math.Min(rI, rJ) + 0.02f : Math.Max(Zone3Radius(i), Zone3Radius(j));
                 var activeZone = 2f * zoneL;
-                var slopeK = zoneL > 0.001f ? (RepulsionS - RepulsionP) / activeZone : 0f;
 
                 Vector2 repulsion = Vector2.Zero;
                 if (distance <= activeZone)
-                {
-                    var force = RepulsionS - slopeK * distance;
-                    repulsion = -direction * force;
-                }
+                    repulsion = -direction * RepulsionP;
 
                 var pairForce = attraction + repulsion;
                 forces[i] += pairForce;
@@ -132,14 +108,11 @@ public sealed class PhysicsModel
             }
         }
 
-        // Step 3: Integrate
         for (var i = 0; i < Nodes.Count; i++)
         {
             var friction = -FrictionK * Nodes[i].Velocity;
             var totalForce = forces[i] + friction;
-
-            var acceleration = totalForce;
-            Nodes[i].Velocity += acceleration * dt;
+            Nodes[i].Velocity += totalForce * dt;
 
             var speed = Nodes[i].Velocity.Length();
             if (speed > MaxSpeed)
@@ -155,44 +128,60 @@ public sealed class PhysicsModel
             Nodes[i].Velocity = Vector2.Zero;
     }
 
+    private static Port MakePort(string id, PhysicsNode node, float offsetX, float offsetY)
+        => new(id, node, offsetX, offsetY);
+
     public static void CreateGraphABC(PhysicsModel model, float cx, float cy)
     {
         model.Nodes.Clear();
         model.Edges.Clear();
+        model.Arcs.Clear();
 
-        var a = new PhysicsNode("A", cx - 200, cy) { Width = 320f, Height = 160f };
+        var a = new PhysicsNode("A", cx - BigNodeOffset, cy) { Width = BigNodeWidth, Height = BigNodeHeight };
         var b = new PhysicsNode("B", cx, cy);
-        var c = new PhysicsNode("C", cx + 200, cy);
+        var c = new PhysicsNode("C", cx + BigNodeOffset, cy);
 
         model.Nodes.Add(a);
         model.Nodes.Add(b);
         model.Nodes.Add(c);
 
-        model.Edges.Add(new Edge(0, 1));
-        model.Edges.Add(new Edge(1, 2));
+        var pA_right = MakePort("A_right", a, a.Width / 2, 0);
+        var pB_left = MakePort("B_left", b, -b.Width / 2, 0);
+        var pB_right = MakePort("B_right", b, b.Width / 2, 0);
+        var pC_left = MakePort("C_left", c, -c.Width / 2, 0);
+
+        model.Edges.Add(new Edge(pA_right, pB_left));
+        model.Edges.Add(new Edge(pB_right, pC_left));
     }
 
     public static void CreateGraphABCSmall(PhysicsModel model, float cx, float cy)
     {
         model.Nodes.Clear();
         model.Edges.Clear();
+        model.Arcs.Clear();
 
-        var a = new PhysicsNode("A", cx - 200, cy);
-        var b = new PhysicsNode("B", cx, cy) { Width = 320f, Height = 160f };
-        var c = new PhysicsNode("C", cx + 200, cy);
+        var a = new PhysicsNode("A", cx - SmallNodeOffset, cy);
+        var b = new PhysicsNode("B", cx, cy) { Width = BigNodeWidth, Height = BigNodeHeight };
+        var c = new PhysicsNode("C", cx + SmallNodeOffset, cy);
 
         model.Nodes.Add(a);
         model.Nodes.Add(b);
         model.Nodes.Add(c);
 
-        model.Edges.Add(new Edge(0, 1));
-        model.Edges.Add(new Edge(1, 2));
+        var pA_right = MakePort("A_right", a, a.Width / 2, 0);
+        var pB_left = MakePort("B_left", b, -b.Width / 2, 0);
+        var pB_right = MakePort("B_right", b, b.Width / 2, 0);
+        var pC_left = MakePort("C_left", c, -c.Width / 2, 0);
+
+        model.Edges.Add(new Edge(pA_right, pB_left));
+        model.Edges.Add(new Edge(pB_right, pC_left));
     }
 
     public static void CreateFullyConnected(PhysicsModel model, float cx, float cy, int count)
     {
         model.Nodes.Clear();
         model.Edges.Clear();
+        model.Arcs.Clear();
 
         var labels = new[] { "A", "B", "C", "D", "E", "F" };
         var radius = 100f + count * 20;
@@ -206,7 +195,15 @@ public sealed class PhysicsModel
         }
 
         for (var i = 0; i < count; i++)
+        {
+            var ni = model.Nodes[i];
+            var pi_right = MakePort($"{labels[i]}_right", ni, ni.Width / 2, 0);
             for (var j = i + 1; j < count; j++)
-                model.Edges.Add(new Edge(i, j));
+            {
+                var nj = model.Nodes[j];
+                var pj_left = MakePort($"{labels[j]}_left", nj, -nj.Width / 2, 0);
+                model.Edges.Add(new Edge(pi_right, pj_left));
+            }
+        }
     }
 }

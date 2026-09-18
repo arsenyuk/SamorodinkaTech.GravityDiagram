@@ -80,7 +80,8 @@ public static class GravityModelDumpWriter
                 Width: n.Width,
                 Height: n.Height,
                 Mass: settings.NodeMass,
-                Bounds: new DumpRect(n.Bounds.Left, n.Bounds.Top, n.Bounds.Width, n.Bounds.Height)))
+                Bounds: new DumpRect(n.Bounds.Left, n.Bounds.Top, n.Bounds.Width, n.Bounds.Height),
+                LastMovementDelta: Vec2(n.LastMovementDelta)))
             .ToList();
 
         var ports = diagram.Ports
@@ -273,7 +274,8 @@ public static class GravityModelDumpWriter
         float Width,
         float Height,
         float Mass,
-        DumpRect Bounds);
+        DumpRect Bounds,
+        DumpVec2? LastMovementDelta = null);
 
     public sealed record DumpPort(
         string Id,

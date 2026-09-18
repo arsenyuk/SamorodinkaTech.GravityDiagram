@@ -17,6 +17,7 @@ public sealed class RectNode
 
 	public Vector2 Position { get; set; } // center
 	public Vector2 Velocity { get; set; }
+	public Vector2 LastMovementDelta { get; set; }
 
 	public float Width { get; set; } = 160;
 	public float Height { get; set; } = 80;
