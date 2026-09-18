@@ -1,69 +1,99 @@
 using SamorodinkaTech.GravityDiagram.Core;
 
+/// <summary>
+/// Настройки физического движка компоновки. Управляют массой нод,
+/// силами взаимодействия, параметрами дуг и ограничениями расстояний.
+/// Находится в глобальном пространстве имён для обратной совместимости.
+/// </summary>
 public sealed class LayoutSettings
 {
-	// Mass used for all nodes (uniform). This influences how strongly forces affect motion:
-	// acceleration = force / mass.
+	/// <summary>Масса всех нод (единая для всех). Влияет на ускорение: a = F / m.</summary>
 	public float NodeMass { get; set; } = 12.8f;
 
+	/// <summary>Параметр смягчения (softening) для гравитационного взаимодействия.</summary>
 	public float Softening { get; set; } = 40f;
-	// Strength of pairwise attraction between nodes (gravity-like).
-	// NOTE: This value is intentionally small because the force also scales with node masses.
+	/// <summary>
+	/// Сила попарного притяжения между нодами (гравитационная).
+	/// Намеренно мала, т.к. сила масштабируется произведением масс нод.
+	/// </summary>
 	public float BackgroundPairGravity { get; set; } = 0.12f;
+	/// <summary>Длина покоя пружины ребра (расстояние, при котором сила пружины равна нулю).</summary>
 	public float EdgeSpringRestLength { get; set; } = 220f;
 
-	// Mutual attraction strength between rectangles that are connected by an arc.
-	// Implemented as a "spring-like" pull along arcs (only attracts, never pushes).
+	/// <summary>
+	/// Сила взаимного притяжения прямоугольников, соединённых дугой.
+	/// Реализовано как «пружина» вдоль дуги (только притягивает, не отталкивает).
+	/// </summary>
 	public float ConnectedArcAttractionK { get; set; } = 2.2f;
 
-	// --- Arc point physics ---
-	// Internal (polyline) arc points are treated as massless: they do not accumulate velocity.
-	// Forces are computed between adjacent points and applied directly to positions.
+	// --- Физика промежуточных точек дуг ---
+	/// <summary>
+	/// Сила притяжения между смежными промежуточными точками дуги.
+	/// Точки дуги считаются безмассовыми: не накапливают скорость.
+	/// </summary>
 	public float ArcPointAttractionK { get; set; } = 6.0f;
 
-	// Scales how fast arc points move per step (positionDelta = force * ArcPointMoveFactor * dt).
+	/// <summary>
+	/// Коэффициент скорости движения точек дуги: dX = force * ArcPointMoveFactor * dt.
+	/// </summary>
 	public float ArcPointMoveFactor { get; set; } = 0.035f;
 
-	// Repulsion strength from node bounds expanded by (MinNodeSpacing/2 + ArcPointExtraClearance).
-	// Force magnitude is proportional to the penetration depth (zone violation).
+	/// <summary>
+	/// Сила отталкивания точек дуги от расширенных границ нод.
+	/// Величина силы пропорциональна глубине проникновения в зону допуска.
+	/// </summary>
 	public float ArcPointNodeRepulsionK { get; set; } = 1200f;
 
-	// When two adjacent internal arc points get closer than this, they are merged.
+	/// <summary>
+	/// Расстояние слияния: если две соседние точки дуги ближе, чем это значение,
+	/// они объединяются в одну (среднее арифметическое).
+	/// </summary>
 	public float ArcPointMergeDistance { get; set; } = 2.0f;
 
-	// How many constraint iterations to run to keep arc points outside node clearance rectangles.
+	/// <summary>Количество итераций ограничений для удержания точек дуги за пределами нод.</summary>
 	public int ArcPointConstraintIterations { get; set; } = 6;
 
-	// Extra clearance margin used for arc points and arc segments against nodes.
+	/// <summary>Дополнительный зазор между точками/сегментами дуги и границами нод.</summary>
 	public float ArcPointExtraClearance { get; set; } = 0f;
 
-	// Upper bound to prevent runaway insertion/repair.
+	/// <summary>Максимальное количество промежуточных точек одной дуги (защита от runaway insertion).</summary>
 	public int MaxArcInternalPoints { get; set; } = 64;
 
-	// If true, arcs try to be as short as possible (spring rest length is treated as 0).
+	/// <summary>
+	/// Если true, дуги стремятся быть максимально короткими
+	/// (длина покоя пружины считается равной нулю).
+	/// </summary>
 	public bool MinimizeArcLength { get; set; } = false;
 
-	// Minimum edge-to-edge distance between rectangles.
-	// Used by ApplyHardMinSpacing when UseHardMinSpacing=true.
+	/// <summary>Минимальное расстояние между краями прямоугольников (edge-to-edge).</summary>
 	public float MinNodeSpacing { get; set; } = 0f;
 
-	// If true, applies a hard post-step constraint solver that enforces MinNodeSpacing.
+	/// <summary>Включить жёсткий пошаговый ограничитель, enforcing MinNodeSpacing.</summary>
 	public bool UseHardMinSpacing { get; set; } = false;
+	/// <summary>Количество итераций жёсткого ограничителя расстояний.</summary>
 	public int HardMinSpacingIterations { get; set; } = 4;
+	/// <summary>Допуск (slop) жёсткого ограничителя расстояний.</summary>
 	public float HardMinSpacingSlop { get; set; } = 0.5f;
 
+	/// <summary>Сила отталкивания перекрывающихся прямоугольников.</summary>
 	public float OverlapRepulsionK { get; set; } = 90f;
 
-	// Extra multiplier for overlap repulsion when UseHardMinSpacing=false.
-	// In that mode, repulsion is the primary mechanism to resolve intersections fast.
+	/// <summary>
+	/// Дополнительный множитель усиления отталкивания при UseHardMinSpacing=false.
+	/// В этом режиме отталкивание — основной механизм быстрого устранения пересечений.
+	/// </summary>
 	public float SoftOverlapBoostWhenHardDisabled { get; set; } = 4f;
+	/// <summary>Коэффициент сопротивления среды (затухание скорости).</summary>
 	public float Drag { get; set; } = 2.2f;
+	/// <summary>Максимальная скорость ноды (за один шаг).</summary>
 	public float MaxSpeed { get; set; } = 2500f;
 
-	// Threshold for force normalization: forces are normalized by max magnitude only if max > threshold.
-	// This prevents small noise forces from driving the system when all forces are negligible.
+	/// <summary>
+	/// Порог нормализации сил: нормализация применяется только если max(force) > threshold.
+	/// Предотвращает шумовые малые силы от управления системой.
+	/// </summary>
 	public float ForceNormalizationThreshold { get; set; } = 1.0f;
 
-	// --- Arc layout options ---
+	/// <summary>Параметры начальной маршрутизации дуг (тип, фиксация концов по нормали).</summary>
 	public ArcLayoutOptions ArcLayoutOptions { get; set; } = new ArcLayoutOptions();
 }

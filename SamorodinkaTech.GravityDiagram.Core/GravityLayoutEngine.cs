@@ -2,23 +2,17 @@ using System.Collections.ObjectModel;
 using System.Numerics;
 
 namespace SamorodinkaTech.GravityDiagram.Core;
-public enum ArcType
-{
-	Polyline,
-	Straight
-}
 
-public class ArcLayoutOptions
-{
-	public ArcType Type { get; set; } = ArcType.Polyline;
-	public bool FixFirstPointToNormal { get; set; } = true;
-	public bool FixLastPointToNormal { get; set; } = true;
-}
-
+/// <summary>
+/// Движок гравитационного расположения диаграммы.
+/// Вычисляет силы притяжения/отталкивания и перемещает узлы за один шаг симуляции.
+/// </summary>
 public sealed class GravityLayoutEngine
 {
 	// Static method for orthogonal polyline generation.
-	private static void MakeOrthogonalPolyline(Vector2 start, Vector2 end, RectSide startSide, RectSide endSide, List<Vector2> internalPoints)
+	// currentHint: existing InternalPoints for hysteresis — if both L-shape candidates are valid,
+	// prefer the one matching the current topology to prevent route oscillation.
+	private static void MakeOrthogonalPolyline(Vector2 start, Vector2 end, RectSide startSide, RectSide endSide, List<Vector2> internalPoints, List<Vector2>? currentHint = null)
 	{
 		const float portArcOffset = 24f;
 		var startDir = ArcRoutingGeometry.SideDir(startSide);
@@ -40,17 +34,36 @@ public sealed class GravityLayoutEngine
 			}
 		}
 
-		// Try both L-shaped candidates first.
+		// Try both L-shaped candidates.
 		var firstCandidate = GetOrthogonalCorner(startOut, endOut, startAxisFirst: true);
-		if (IsValidOrthogonalCorner(startOut, firstCandidate, endOut, startDir, endDir))
+		var firstValid = IsValidOrthogonalCorner(startOut, firstCandidate, endOut, startDir, endDir);
+		var secondCandidate = GetOrthogonalCorner(startOut, endOut, startAxisFirst: false);
+		var secondValid = IsValidOrthogonalCorner(startOut, secondCandidate, endOut, startDir, endDir);
+
+		// Hysteresis: if both candidates are valid, prefer the one matching the current topology.
+		if (firstValid && secondValid && currentHint is { Count: 3 })
+		{
+			var curMid = currentHint[1];
+			var firstDist = Vector2.DistanceSquared(curMid, firstCandidate);
+			var secondDist = Vector2.DistanceSquared(curMid, secondCandidate);
+			if (secondDist < firstDist)
+			{
+				// Current topology matches second candidate — use it first.
+				internalPoints.Add(secondCandidate);
+				internalPoints.Add(endOut);
+				return;
+			}
+			// Otherwise fall through to use first candidate below.
+		}
+
+		if (firstValid)
 		{
 			internalPoints.Add(firstCandidate);
 			internalPoints.Add(endOut);
 			return;
 		}
 
-		var secondCandidate = GetOrthogonalCorner(startOut, endOut, startAxisFirst: false);
-		if (IsValidOrthogonalCorner(startOut, secondCandidate, endOut, startDir, endDir))
+		if (secondValid)
 		{
 			internalPoints.Add(secondCandidate);
 			internalPoints.Add(endOut);
@@ -62,6 +75,11 @@ public sealed class GravityLayoutEngine
 		{
 			var detourX = startOut.X + startDir.X * portArcOffset;
 			var approachY = endOut.Y + endDir.Y * portArcOffset;
+			// When both port normals are horizontal, approachY ≈ startOut.Y — the route
+			// degenerates to a straight horizontal line through nodes.  Detour vertically
+			// by 3× the normal offset to ensure the horizontal segment clears the nodes.
+			if (MathF.Abs(approachY - startOut.Y) < 0.001f)
+				approachY = startOut.Y + portArcOffset * 3;
 			internalPoints.Add(new Vector2(detourX, startOut.Y));
 			internalPoints.Add(new Vector2(detourX, approachY));
 			internalPoints.Add(new Vector2(endOut.X, approachY));
@@ -70,6 +88,9 @@ public sealed class GravityLayoutEngine
 		{
 			var detourY = startOut.Y + startDir.Y * portArcOffset;
 			var approachX = endOut.X + endDir.X * portArcOffset;
+			// Symmetric: when both port normals are vertical, approachX ≈ startOut.X.
+			if (MathF.Abs(approachX - startOut.X) < 0.001f)
+				approachX = startOut.X + portArcOffset * 3;
 			internalPoints.Add(new Vector2(startOut.X, detourY));
 			internalPoints.Add(new Vector2(approachX, detourY));
 			internalPoints.Add(new Vector2(approachX, endOut.Y));
@@ -134,10 +155,29 @@ public sealed class GravityLayoutEngine
 		_settings = settings ?? new LayoutSettings();
 	}
 
+	/// <summary>
+	/// Настройки физики расположения (масса, жёсткость, коэффициенты сил и т. д.).
+	/// </summary>
 	public LayoutSettings Settings => _settings;
+
+	/// <summary>
+	/// Силы, действовавшие на каждый узел при последнем вызове <see cref="Step"/>.
+	/// Ключ — идентификатор узла, значение — суммарный вектор силы.
+	/// </summary>
 	public IReadOnlyDictionary<DiagramId, Vector2> LastForcesByNodeId => _lastForcesByNodeId;
+
+	/// <summary>
+	/// Силы, действовавшие на внутренние точки дуг при последнем вызове <see cref="Step"/>.
+	/// Ключ — идентификатор дуги, значение — массив сил по индексам точек.
+	/// </summary>
 	public IReadOnlyDictionary<DiagramId, Vector2[]> LastArcPointForcesByArcId => _lastArcPointForcesByArcId;
 
+	/// <summary>
+	/// Предсказывает результат шага симуляции, не изменяя текущее состояние диаграммы.
+	/// </summary>
+	/// <param name="diagram">Диаграмма для предсказания.</param>
+	/// <param name="dt">Шаг времени (секунды, должен быть &gt; 0).</param>
+	/// <returns>Снимок предсказанных позиций и сил.</returns>
 	public LayoutStepPreview PreviewStep(Diagram diagram, float dt)
 	{
 		ArgumentNullException.ThrowIfNull(diagram);
@@ -284,6 +324,12 @@ public sealed class GravityLayoutEngine
 			SumTotalForce: sumTotal);
 	}
 
+	/// <summary>
+	/// Выполняет один шаг симуляции: вычисляет силы, интегрирует скорость и перемещает узлы.
+	/// Внутренние точки дуг также обновляются с учётом ортогональной маршрутизации.
+	/// </summary>
+	/// <param name="diagram">Диаграмма, узлы которой будут перемещены.</param>
+	/// <param name="dt">Шаг времени (секунды, должен быть &gt; 0).</param>
 	public void Step(Diagram diagram, float dt)
 	{
 		ArgumentNullException.ThrowIfNull(diagram);
@@ -619,8 +665,11 @@ public sealed class GravityLayoutEngine
 			}
 
 			// Ортогональная ломаная: только горизонтальные и вертикальные сегменты
-			internalPoints.Clear();
-			MakeOrthogonalPolyline(start, end, startSide, endSide, internalPoints);
+			// MakeOrthogonalPolyline генерирует полилинию; если текущая InternalPoints
+			// уже содержит валидную полилинию, передаём её копию как подсказку для гистерезиса,
+			// чтобы предотвратить осцилляцию маршрута у порога решения.
+			List<Vector2>? hint = internalPoints.Count > 0 ? [.. internalPoints] : null;
+			MakeOrthogonalPolyline(start, end, startSide, endSide, internalPoints, currentHint: hint);
 			
 			if (internalPoints.Count > maxInternal)
 				internalPoints.RemoveRange(maxInternal, internalPoints.Count - maxInternal);
@@ -691,6 +740,19 @@ public sealed class GravityLayoutEngine
 					f = new Vector2(f.X, 0f);
 				}
 				internalPoints[i] += f;
+			}
+
+			// Snap each point to axis of predecessor to prevent floating-point drift
+			// from accumulating across steps (which would make segments non-orthogonal).
+			for (var i = 0; i < internalPoints.Count; i++)
+			{
+				var prev = (i == 0) ? start : internalPoints[i - 1];
+				var dx = MathF.Abs(prev.X - internalPoints[i].X);
+				var dy = MathF.Abs(prev.Y - internalPoints[i].Y);
+				if (dx >= dy)
+					internalPoints[i] = new Vector2(internalPoints[i].X, prev.Y);
+				else
+					internalPoints[i] = new Vector2(prev.X, internalPoints[i].Y);
 			}
 
 			// Hard constraints: keep internal points outside clearance rectangles.
@@ -841,7 +903,6 @@ public sealed class GravityLayoutEngine
 			EnsureOrthogonalEndpoints(start, end, startSide, endSide, internalPoints);
 
 			// Collinear merge after EnsureOrthogonalEndpoints — it may insert collinear points.
-			Console.WriteLine($"[merge3] count={internalPoints.Count}");
 			for (var i = internalPoints.Count - 2; i >= 1; i--)
 			{
 				var prev = internalPoints[i - 1];
@@ -849,7 +910,6 @@ public sealed class GravityLayoutEngine
 				var next = internalPoints[i + 1];
 				var sameX = MathF.Abs(prev.X - curr.X) < 0.01f && MathF.Abs(curr.X - next.X) < 0.01f;
 				var sameY = MathF.Abs(prev.Y - curr.Y) < 0.01f && MathF.Abs(curr.Y - next.Y) < 0.01f;
-				Console.WriteLine($"[merge3] i={i} prev=({prev.X:F2},{prev.Y:F2}) curr=({curr.X:F2},{curr.Y:F2}) next=({next.X:F2},{next.Y:F2}) sameX={sameX} sameY={sameY}");
 				if (sameX || sameY)
 					internalPoints.RemoveAt(i);
 			}
@@ -880,6 +940,20 @@ public sealed class GravityLayoutEngine
 					{
 						internalPoints.RemoveAt(i);
 					}
+				}
+			}
+
+			// Final enforcement: push any internal points that ended up inside node bounds
+			// back outside. This handles the case where snap/merge moved repaired waypoints.
+			for (var i = 0; i < internalPoints.Count; i++)
+			{
+				var p = internalPoints[i];
+				for (var n = 0; n < nodes.Count; n++)
+				{
+					var r = Expand(nodes[n].Bounds, clearance);
+					if (!r.Contains(p)) continue;
+					internalPoints[i] = PushPointOutOfRect(p, r, 2f);
+					p = internalPoints[i];
 				}
 			}
 
@@ -1532,6 +1606,12 @@ public sealed class GravityLayoutEngine
 		}
 	}
 
+	/// <summary>
+	/// Вычисляет мировые координаты порта на основе позиции и размеров узла.
+	/// </summary>
+	/// <param name="node">Узел, которому принадлежит порт.</param>
+	/// <param name="port">Ссылка на порт (сторона + смещение 0..1).</param>
+	/// <returns>Абсолютная позиция порта.</returns>
 	public static Vector2 GetPortWorldPosition(RectNode node, PortRef port)
 	{
 		var offset = Math.Clamp(port.Offset, 0f, 1f);

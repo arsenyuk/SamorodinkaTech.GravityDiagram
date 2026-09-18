@@ -116,6 +116,9 @@ public sealed class DynamicArcRoutingTests
             nodeA.Position = centerA;
             nodeA.Velocity = Vector2.Zero;
 
+            // Re-run one step so InternalPoints are computed for the pinned positions.
+            engine.Step(d, 1f / 60f);
+
             // --- Checks ---
 
             // 1) All internal segments must be axis-aligned (90 degree bends).

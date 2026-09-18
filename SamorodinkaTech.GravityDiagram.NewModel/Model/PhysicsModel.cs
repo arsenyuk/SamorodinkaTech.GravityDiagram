@@ -4,10 +4,17 @@ using System.Numerics;
 
 namespace SamorodinkaTech.GravityDiagram.NewModel;
 
+/// <summary>
+/// Физическая модель графа — хранит узлы, рёбра и дуги,
+/// а также параметры симуляции (отталкивание, притяжение, трение).
+/// </summary>
 public sealed class PhysicsModel
 {
+    /// <summary>Список узлов графа.</summary>
     public readonly List<PhysicsNode> Nodes = [];
+    /// <summary>Список рёбер графа.</summary>
     public readonly List<Edge> Edges = [];
+    /// <summary>Список ортогональных дуг (вычисляются из рёбер).</summary>
     public readonly List<Arc> Arcs = [];
 
     // Sample graph layout constants
@@ -16,9 +23,13 @@ public sealed class PhysicsModel
     private const float BigNodeOffset = 350f;
     private const float SmallNodeOffset = 200f;
 
+    /// <summary>Сила отталкивания между узлами (в зоне активности).</summary>
     public float RepulsionP = 10f;
+    /// <summary>Коэффициент притяжения по закону Гука (F = K × distance).</summary>
     public float AttractionK = 0.001f;
+    /// <summary>Коэффициент трения (замедление скорости каждый кадр).</summary>
     public float FrictionK = 0.99f;
+    /// <summary>Включить микро-тасование позиций для выхода из локальных минимумов.</summary>
     public bool UseJitter = true;
 
     private const float MaxSpeed = 2000f;
@@ -62,6 +73,11 @@ public sealed class PhysicsModel
         return maxZ2;
     }
 
+    /// <summary>
+    /// Один шаг симуляции физики: вычисляет силы (отталкивание + притяжение),
+    /// применяет трение, интегрирует скорость и позиции.
+    /// </summary>
+    /// <param name="dt">Временной шаг (секунды).</param>
     public void Step(float dt)
     {
         var forces = new Vector2[Nodes.Count];
@@ -120,6 +136,7 @@ public sealed class PhysicsModel
         }
     }
 
+    /// <summary>Обнуляет скорости всех узлов (останавливает симуляцию).</summary>
     public void ResetVelocities()
     {
         for (var i = 0; i < Nodes.Count; i++)
@@ -129,6 +146,10 @@ public sealed class PhysicsModel
     private static Port MakePort(string id, PhysicsNode node, float offsetX, float offsetY)
         => new(id, node, offsetX, offsetY);
 
+    /// <summary>
+    /// Создаёт граф A→B→C с одной большой нодой (B), два ребра, четыре порта.
+    /// Позиции рассчитываются от центра (cx, cy).
+    /// </summary>
     public static void CreateGraphABC(PhysicsModel model, float cx, float cy)
     {
         model.Nodes.Clear();
@@ -152,6 +173,10 @@ public sealed class PhysicsModel
         model.Edges.Add(new Edge(pB_right, pC_left));
     }
 
+    /// <summary>
+    /// Создаёт граф A→B→C с большой центральной нодой (B) и двумя малыми (A, C).
+    /// Отличие от CreateGraphABC: A и C маленькие, B большая.
+    /// </summary>
     public static void CreateGraphABCSmall(PhysicsModel model, float cx, float cy)
     {
         model.Nodes.Clear();

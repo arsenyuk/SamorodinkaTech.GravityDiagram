@@ -3,8 +3,16 @@ using SamorodinkaTech.GravityDiagram.Core;
 
 namespace SamorodinkaTech.GravityDiagram.Demo;
 
+/// <summary>
+/// Фабрика примеров диаграмм для демо-приложения.
+/// Предоставляет готовые двух- и трёхузловые графы для демонстрации компоновки.
+/// </summary>
 public static class SampleDiagram
 {
+    /// <summary>
+    /// Создаёт диаграмму с тремя узлами и двумя дугами: «1→2» и «1→3».
+    /// Узлы «2» и «3» расположены справа от «1».
+    /// </summary>
     public static Diagram CreateThreeNode()
     {
         var diagram = new Diagram();
@@ -31,6 +39,10 @@ public static class SampleDiagram
         return diagram;
     }
 
+    /// <summary>
+    /// Создаёт простую диаграмму с двумя узлами (A→B) и одной дугой.
+    /// Используется как начальная модель при запуске демо.
+    /// </summary>
     public static Diagram CreateTwoNode()
     {
         var diagram = new Diagram();

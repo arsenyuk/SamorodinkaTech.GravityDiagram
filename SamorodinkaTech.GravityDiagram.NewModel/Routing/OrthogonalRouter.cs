@@ -352,74 +352,72 @@ public static class OrthogonalRouter
 
     private static List<Vector2> ComputeDetour(Vector2 a, Vector2 b, RectF rect)
     {
-        var rLeft = rect.X;
-        var rRight = rect.X + rect.Width;
-        var rTop = rect.Y;
-        var rBottom = rect.Y + rect.Height;
-
         var margin = 20f;
 
-        // Проверяем: b внутри или на границе rect?
-        var bInsideRect = b.X >= rLeft && b.X <= rRight && b.Y >= rTop && b.Y <= rBottom;
+        // Проверяем: b внутри rect?
+        var bInsideRect = rect.Contains(b);
 
         List<Vector2> result;
 
         if (Math.Abs(a.Y - b.Y) < AxisTolerance)
         {
-            // Горизонтальный сегмент
+            // Горизонтальный сегмент — ломаем посередине a→b
+            var midX = (a.X + b.X) / 2;
+            // Определяем направление обхода: вверх или вниз от rect
+            var goUp = a.Y <= rect.Y + rect.Height / 2;
+            var dy = goUp ? rect.Y - margin : rect.Y + rect.Height + margin;
+
             if (bInsideRect)
             {
-                // b внутри rect — обходим rect целиком, выходим за rect, затем к b
-                var goUp = a.Y <= (rTop + rBottom) / 2;
-                var dy = goUp ? rTop - margin : rBottom + margin;
-                var exitX = a.X < (rLeft + rRight) / 2 ? rLeft - margin : rRight + margin;
-                var approachX = b.X < (rLeft + rRight) / 2 ? rLeft - margin : rRight + margin;
+                // b внутри rect — ломаем посередине, обходим rect целиком
+                var approachX = b.X < rect.X + rect.Width / 2
+                    ? rect.X - margin
+                    : rect.X + rect.Width + margin;
                 result = new List<Vector2>
                 {
-                    a, new(a.X, dy), new(exitX, dy), new(approachX, dy), new(approachX, b.Y), b
+                    a, new(midX, a.Y), new(midX, dy), new(approachX, dy), new(approachX, b.Y), b
                 };
             }
             else
             {
-                var goUp = a.Y <= (rTop + rBottom) / 2;
-                var dy = goUp ? rTop - margin : rBottom + margin;
-                var cornerX = b.X < (rLeft + rRight) / 2
-                    ? rRight + margin
-                    : rLeft - margin;
                 result = new List<Vector2>
                 {
-                    a, new(a.X, dy), new(cornerX, dy), new(cornerX, b.Y), b
+                    a, new(midX, a.Y), new(midX, dy), new(midX, b.Y), b
                 };
             }
         }
         else if (Math.Abs(a.X - b.X) < AxisTolerance)
         {
-            // Вертикальный сегмент
+            // Вертикальный сегмент — ломаем посередине a→b
+            var midY = (a.Y + b.Y) / 2;
+            var goLeft = a.X >= rect.X + rect.Width / 2;
+            var dx = goLeft ? rect.X - margin : rect.X + rect.Width + margin;
+
             if (bInsideRect)
             {
-                var goLeft = a.X >= (rLeft + rRight) / 2;
-                var dx = goLeft ? rLeft - margin : rRight + margin;
-                var approachY = b.Y < (rTop + rBottom) / 2 ? rTop - margin : rBottom + margin;
+                var approachY = b.Y < rect.Y + rect.Height / 2
+                    ? rect.Y - margin
+                    : rect.Y + rect.Height + margin;
                 result = new List<Vector2>
                 {
-                    a, new(dx, a.Y), new(dx, approachY), new(b.X, approachY), b
+                    a, new(a.X, midY), new(dx, midY), new(dx, approachY), new(b.X, approachY), b
                 };
             }
             else
             {
-                var dx = a.X >= (rLeft + rRight) / 2 ? rLeft - margin : rRight + margin;
-                var cornerY = b.Y < (rTop + rBottom) / 2
-                    ? rBottom + margin
-                    : rTop - margin;
                 result = new List<Vector2>
                 {
-                    a, new(dx, a.Y), new(dx, cornerY), new(b.X, cornerY), b
+                    a, new(a.X, midY), new(dx, midY), new(b.X, midY), b
                 };
             }
         }
         else
         {
             // Диагональный сегмент
+            var rLeft = rect.X;
+            var rRight = rect.X + rect.Width;
+            var rTop = rect.Y;
+            var rBottom = rect.Y + rect.Height;
             var breakX = a.X < (rLeft + rRight) / 2 ? rLeft - margin : rRight + margin;
             var breakY = a.Y < (rTop + rBottom) / 2 ? rTop - margin : rBottom + margin;
             result = new List<Vector2>

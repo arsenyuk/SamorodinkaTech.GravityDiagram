@@ -9,10 +9,23 @@ using SamorodinkaTech.GravityDiagram.Core;
 
 namespace SamorodinkaTech.GravityDiagram.Demo;
 
+/// <summary>
+/// Сериализует текущее состояние физической модели (узлы, порты, дуги, силы) в JSON-дамп.
+/// Дамп используется для отладки и воспроизведения проблем с маршрутизацией дуг.
+/// </summary>
 public static class GravityModelDumpWriter
 {
     private static int Pixel(float v) => (int)MathF.Round(v, MidpointRounding.AwayFromZero);
 
+    /// <summary>
+    /// Записывает полный дамп модели в JSON-файл и возвращает путь к нему.
+    /// Выполняет один.preview-step движка для фиксации предсказанных позиций и сил.
+    /// </summary>
+    /// <param name="diagram">Текущее состояние диаграммы.</param>
+    /// <param name="engine">Движок компоновки с настройками.</param>
+    /// <param name="dt">Временной шаг (для воспроизводимости).</param>
+    /// <param name="uiDebug">Необязательные отладочные данные об автостопе.</param>
+    /// <returns>Путь к записанному JSON-файлу.</returns>
     public static string WriteDump(Diagram diagram, GravityLayoutEngine engine, float dt, AutoStopDebugSnapshot? uiDebug = null)
     {
         ArgumentNullException.ThrowIfNull(diagram);

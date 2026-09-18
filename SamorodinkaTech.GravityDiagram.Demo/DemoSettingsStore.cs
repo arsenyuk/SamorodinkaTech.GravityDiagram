@@ -5,6 +5,10 @@ using SamorodinkaTech.GravityDiagram.Core;
 
 namespace SamorodinkaTech.GravityDiagram.Demo;
 
+/// <summary>
+/// Хранит настройки физической компоновки в JSON-файле в AppData.
+/// Обеспечивает загрузку/сохранение между сессиями демо-приложения.
+/// </summary>
 public sealed class DemoSettingsStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -13,6 +17,7 @@ public sealed class DemoSettingsStore
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
+    /// <summary>Полный путь к JSON-файлу с настройками.</summary>
     public string SettingsFilePath { get; }
 
     public DemoSettingsStore(string? settingsFilePath = null)
@@ -20,6 +25,10 @@ public sealed class DemoSettingsStore
         SettingsFilePath = settingsFilePath ?? GetDefaultSettingsFilePath();
     }
 
+    /// <summary>
+    /// Загружает сохранённые настройки из JSON-файла и применяет их к указанному объекту.
+    /// </summary>
+    /// <returns>true, если файл найден и успешно прочитан; иначе false.</returns>
     public bool TryLoadInto(LayoutSettings target)
     {
         ArgumentNullException.ThrowIfNull(target);
@@ -45,6 +54,7 @@ public sealed class DemoSettingsStore
         }
     }
 
+    /// <summary>Сериализует текущие настройки в JSON и записывает в файл.</summary>
     public void Save(LayoutSettings source)
     {
         ArgumentNullException.ThrowIfNull(source);

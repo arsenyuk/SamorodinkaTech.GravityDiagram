@@ -12,6 +12,11 @@ using SamorodinkaTech.GravityDiagram.Core;
 
 namespace SamorodinkaTech.GravityDiagram.Demo;
 
+/// <summary>
+/// Визуализатор диаграммы на Avalonia. Запускает физическую симуляцию на таймере,
+/// маршрутизирует дуги, размещает подписи и отрисовывает узлы/дуги/порты.
+/// Поддерживает перетаскивание узлов мышью и автоматическую остановку при стабилизации.
+/// </summary>
 public sealed class DiagramView : Control
 {
     private const float ArcOutDistance = 0f;
@@ -52,22 +57,8 @@ public sealed class DiagramView : Control
 
     private const double NodeTextPadding = 1.0;
 
-    public enum RectTextHAlign
-    {
-        Left,
-        Center,
-        Right,
-    }
-
-    public enum RectTextVAlign
-    {
-        Top,
-        Center,
-        Bottom,
-    }
-
-    public RectTextHAlign NodeTextHorizontalAlignment { get; set; } = RectTextHAlign.Center;
-    public RectTextVAlign NodeTextVerticalAlignment { get; set; } = RectTextVAlign.Center;
+    internal RectTextHAlign NodeTextHorizontalAlignment { get; set; } = RectTextHAlign.Center;
+    internal RectTextVAlign NodeTextVerticalAlignment { get; set; } = RectTextVAlign.Center;
 
     private static readonly Color[] Rainbow =
     {
@@ -119,6 +110,10 @@ public sealed class DiagramView : Control
     private int _lastPixelMoveTick;
     private string _lastPixelMoveInfo = string.Empty;
 
+    /// <summary>
+    /// Инициализирует виджет: создаёт движок с настройками по умолчанию,
+    /// загружает двухузловую диаграмму и запускает предварительную (pre-measure) компоновку.
+    /// </summary>
     public DiagramView()
     {
         ClipToBounds = true;
@@ -191,9 +186,15 @@ public sealed class DiagramView : Control
             _timer.Start();
     }
 
+    /// <summary>Текущая диаграмма.</summary>
     public Diagram Diagram { get; private set; }
+    /// <summary>Движок физической компоновки.</summary>
     public GravityLayoutEngine Engine { get; private set; }
 
+    /// <summary>
+    /// Возвращает снимок состояния автостопа для включения в дамп модели.
+    /// Содержит номер тика, порог и информацию о последнем движении по пикселям.
+    /// </summary>
     public AutoStopDebugSnapshot GetAutoStopDebugSnapshot()
         => new(
             TickCounter: _tickCounter,
@@ -205,6 +206,10 @@ public sealed class DiagramView : Control
             EnablePortLabelAwareNodeMovement: EnablePortLabelAwareNodeMovement,
             EnableArcLabelAwareNodeMovement: EnableArcLabelAwareNodeMovement);
 
+    /// <summary>
+    /// Обнуляет скорости всех узлов и сбрасывает кэш смещений полос дуг.
+    /// Вызывается после изменения параметров для перезапуска стабилизации.
+    /// </summary>
     public void ResetVelocities()
     {
         foreach (var n in Diagram.Nodes)
@@ -216,6 +221,10 @@ public sealed class DiagramView : Control
         ResumeSimulation();
     }
 
+    /// <summary>
+    /// Перезапускает warm-start компоновки с учётом подписей и узлов.
+    /// Используется кнопкой «Stabilize» — принудительно доводит диаграмму до стабильного состояния.
+    /// </summary>
     public void StabilizeLayout()
     {
         ResumeSimulation();
@@ -229,6 +238,11 @@ public sealed class DiagramView : Control
         InvalidateVisual();
     }
 
+    /// <summary>
+    /// Заменяет текущую диаграмму, распределяет порты и запускает warm-start компоновки.
+    /// Останавливает текущую симуляцию и перерисовывает виджет.
+    /// </summary>
+    /// <param name="diagram">Новая диаграмма (не null).</param>
     public void SetDiagram(Diagram diagram)
     {
         Diagram = diagram ?? throw new ArgumentNullException(nameof(diagram));
@@ -599,6 +613,10 @@ public sealed class DiagramView : Control
         }
     }
 
+    /// <summary>
+    /// Отрисовывает диаграмму: фон, дуги, узлы с портами, подписи и отладочный оверлей.
+    /// Использует кэшированные артефакты (маршруты дуг, размещённые подписи), рассчитанные в Tick().
+    /// </summary>
     public override void Render(DrawingContext context)
     {
         base.Render(context);
@@ -1095,27 +1113,6 @@ public sealed class DiagramView : Control
         return score;
     }
 
-    private sealed record RoutedArc(Arc Arc, List<Vector2> Polyline, Vector2 LabelBasePoint, Vector2 LabelNormal);
-
-    private sealed record PlacedLabels(
-        IReadOnlyDictionary<DiagramId, Rect> PortLabelRects,
-        IReadOnlyDictionary<DiagramId, Rect> ArcLabelRects,
-        IReadOnlyList<Rect> AllLabelRects);
-
-    private enum SidePortLabelVerticalAlign
-    {
-        Bottom,
-        Center,
-        Top,
-    }
-
-    private enum BottomPortLabelHorizontalAlign
-    {
-        Right,
-        Center,
-        Left,
-    }
-
     // Default placement rules:
     // - Side ports (Left/Right): label is outside horizontally, aligned vertically by this rule.
     // - Bottom ports: label is outside vertically (below), aligned horizontally by this rule.
@@ -1180,16 +1177,6 @@ public sealed class DiagramView : Control
             DrawLabelWithBackground(context, arc.Text, r, arcTextBrush, LabelFontSize);
         }
     }
-
-    private enum LabelKind { Port, Arc }
-
-    private sealed record LabelCandidate(
-        LabelKind Kind,
-        DiagramId Id,
-        string Text,
-        Vector2 Origin,
-        Vector2 PreferredOrigin,
-        Vector2 Size);
 
     private void SolveLabelPlacement(
         List<LabelCandidate> labels,

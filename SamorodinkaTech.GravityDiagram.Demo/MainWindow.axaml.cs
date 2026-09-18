@@ -9,12 +9,17 @@ using System.Threading.Tasks;
 
 namespace SamorodinkaTech.GravityDiagram.Demo;
 
+/// <summary>
+/// Главное окно демо-приложения. Загружает диаграмму, привязывает панель настроек к физическим параметрам
+/// и автоматически сохраняет изменения в файл.
+/// </summary>
 public partial class MainWindow : Window
 {
     private readonly DemoSettingsStore _settingsStore = new();
     private readonly DispatcherTimer _saveDebounce;
 	private bool _suppressAutoSave;
 
+    /// <summary>Создаёт окно, загружает начальную диаграмму и настраивает панель параметров.</summary>
     public MainWindow()
     {
         InitializeComponent();

@@ -2,8 +2,15 @@ using System.Numerics;
 
 namespace SamorodinkaTech.GravityDiagram.Core;
 
+/// <summary>
+/// Геометрические утилиты для маршрутизации дуг: направления сторон,
+/// проверка пересечения отрезков с прямоугольниками и т.д.
+/// </summary>
 public static class ArcRoutingGeometry
 {
+	/// <summary>
+	/// Возвращает нормаль (направление от центра) для заданной стороны прямоугольника.
+	/// </summary>
 	public static Vector2 SideDir(RectSide side)
 		=> side switch
 		{

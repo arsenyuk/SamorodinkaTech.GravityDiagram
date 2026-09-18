@@ -4,6 +4,9 @@ using Avalonia.Markup.Xaml;
 
 namespace SamorodinkaTech.GravityDiagram.Demo;
 
+/// <summary>
+/// Корневое приложение Avalonia. Загружает XAML-маркировку и создаёт главное окно.
+/// </summary>
 public partial class App : Application
 {
     public override void Initialize()

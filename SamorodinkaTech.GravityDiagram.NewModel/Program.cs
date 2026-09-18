@@ -4,8 +4,16 @@ using System.Threading.Tasks;
 
 namespace SamorodinkaTech.GravityDiagram.NewModel;
 
+/// <summary>
+/// Точка входа Avalonia-приложения.
+/// Регистрирует глобальные обработчики необработанных исключений
+/// и запускает графический интерфейс.
+/// </summary>
 class Program
 {
+    /// <summary>
+    /// Главный метод: регистрирует обработчики ошибок и запускает Avalonia.
+    /// </summary>
     [STAThread]
     public static void Main(string[] args)
     {
@@ -21,6 +29,7 @@ class Program
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
+    /// <summary>Собирает и настраивает билдер Avalonia с платформенным детектом и шрифтом Inter.</summary>
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()

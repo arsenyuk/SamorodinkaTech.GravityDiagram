@@ -2,6 +2,19 @@ using System.Numerics;
 
 namespace SamorodinkaTech.GravityDiagram.Core;
 
+/// <summary>
+/// Снимок состояния физической симуляции на один шаг.
+/// Содержит агрегированные данные о силах и ссылки на состояния узлов и дуг.
+/// </summary>
+/// <param name="CreatedAtUtc">Момент времени (UTC), когда был создан этот снимок.</param>
+/// <param name="Dt">Величина временного шага симуляции (в секундах).</param>
+/// <param name="Nodes">Состояния всех узлов на данном шаге.</param>
+/// <param name="Arcs">Состояния всех дуг на данном шаге.</param>
+/// <param name="SumBackgroundGravityForce">Суммарная сила фонового гравитационного притяжения всех узлов к центру.</param>
+/// <param name="SumOverlapRepulsionForce">Суммарная сила отталкивания узлов при перекрытии.</param>
+/// <param name="SumConnectedArcAttractionForce">Суммарная сила притяжения узлов по соединяющим их дугам.</param>
+/// <param name="SumArcPointEndpointForce">Суммарная сила, прижимающая промежуточные точки дуг к портам.</param>
+/// <param name="SumTotalForce">Результирующая суммарная сила на всех узлах.</param>
 public sealed record LayoutStepPreview(
 	DateTimeOffset CreatedAtUtc,
 	float Dt,
@@ -12,34 +25,3 @@ public sealed record LayoutStepPreview(
 	Vector2 SumConnectedArcAttractionForce,
 	Vector2 SumArcPointEndpointForce,
 	Vector2 SumTotalForce);
-
-public sealed record NodeStepPreview(
-	DiagramId Id,
-	Vector2 Position,
-	Vector2 Velocity,
-	float Mass,
-	Vector2 ForceBackgroundGravity,
-	Vector2 ForceOverlapRepulsion,
-	Vector2 ForceConnectedArcAttraction,
-	Vector2 ForceArcPointEndpoint,
-	Vector2 ForceTotal,
-	Vector2 PredictedPositionIfNoForces,
-	Vector2 PredictedVelocityIfNoForces,
-	Vector2 DeltaPositionIfNoForces,
-	Vector2 PredictedPositionBeforeConstraints,
-	Vector2 PredictedVelocityBeforeConstraints,
-	Vector2 PredictedPosition,
-	Vector2 PredictedVelocity,
-	Vector2 DeltaPositionBeforeConstraints,
-	Vector2 DeltaPosition);
-
-public sealed record ArcStepPreview(
-	DiagramId Id,
-	DiagramId FromPortId,
-	DiagramId ToPortId,
-	IReadOnlyList<ArcPointStepPreview> InternalPoints);
-
-public sealed record ArcPointStepPreview(
-	int Index,
-	Vector2 Position,
-	Vector2 Force);

@@ -2,6 +2,10 @@ using Avalonia.Controls;
 
 namespace SamorodinkaTech.GravityDiagram.NewModel;
 
+/// <summary>
+/// Главное окно Avalonia-приложения.
+/// Содержит ModelView для отрисовки графа и панель параметров (слайдеры, чекбоксы).
+/// </summary>
 public partial class MainWindow : Window
 {
     private bool _initialized;
@@ -13,6 +17,9 @@ public partial class MainWindow : Window
         _initialized = true;
     }
 
+    /// <summary>
+    /// Привязывает UI-элементы (слайдеры, чекбоксы, кнопки) к параметрам физической модели.
+    /// </summary>
     private void SetupBindings()
     {
         var model = ModelView.Model;
@@ -66,6 +73,14 @@ public partial class MainWindow : Window
         };
     }
 
+    /// <summary>
+    /// Привязывает слайдер к свойству модели и обновляет текстовое значение.
+    /// </summary>
+    /// <param name="sliderName">Имя слайдера в AXAML.</param>
+    /// <param name="valueTextName">Имя TextBlock для отображения текущего значения.</param>
+    /// <param name="get">Геттер текущего значения из модели.</param>
+    /// <param name="set">Сеттер значения в модель.</param>
+    /// <param name="format">Формат строки для числового значения.</param>
     private void BindSlider(string sliderName, string valueTextName,
         System.Func<float> get, System.Action<float> set, string format)
     {

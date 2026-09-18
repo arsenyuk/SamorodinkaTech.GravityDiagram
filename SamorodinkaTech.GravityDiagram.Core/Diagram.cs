@@ -3,14 +3,26 @@ using System.Linq;
 
 namespace SamorodinkaTech.GravityDiagram.Core;
 
+/// <summary>
+/// Контейнер диаграммы: хранит коллекции нод, портов и дуг.
+/// Предоставляет методы добавления, поиска и валидации элементов.
+/// </summary>
 public sealed class Diagram
 {
 	private readonly List<RectNode> _nodes = new();
 	private readonly List<Port> _ports = new();
 	private readonly List<Arc> _arcs = new();
 
+	/// <summary>
+	/// Автоматически распределять порты по сторонам при добавлении.
+	/// Если включено, все порты на одной стороне одной ноды распределяются равномерно.
+	/// </summary>
 	public bool AutoDistributePorts { get; set; } = true;
 
+	/// <summary>
+	/// Перераспределяет все порты пропорционально по сторонам нод.
+	/// Каждая группа портов (нода + сторона) получает равномерное распределение.
+	/// </summary>
 	public void DistributeAllPortsProportionally()
 	{
 		foreach (var g in _ports.GroupBy(p => (p.Ref.NodeId, p.Ref.Side)))
@@ -19,10 +31,14 @@ public sealed class Diagram
 		}
 	}
 
+	/// <summary>Только для чтения коллекция нод диаграммы.</summary>
 	public ReadOnlyCollection<RectNode> Nodes => _nodes.AsReadOnly();
+	/// <summary>Только для чтения коллекция портов диаграммы.</summary>
 	public ReadOnlyCollection<Port> Ports => _ports.AsReadOnly();
+	/// <summary>Только для чтения коллекция дуг диаграммы.</summary>
 	public ReadOnlyCollection<Arc> Arcs => _arcs.AsReadOnly();
 
+	/// <summary>Добавляет ноду в диаграмму и возвращает её.</summary>
 	public RectNode AddNode(RectNode node)
 	{
 		ArgumentNullException.ThrowIfNull(node);
@@ -30,6 +46,10 @@ public sealed class Diagram
 		return node;
 	}
 
+	/// <summary>
+	/// Добавляет порт в диаграмму. При включённом AutoDistributePorts
+	/// автоматически перераспределяет порты на стороне ноды.
+	/// </summary>
 	public Port AddPort(Port port)
 	{
 		ArgumentNullException.ThrowIfNull(port);
@@ -41,6 +61,10 @@ public sealed class Diagram
 		return port;
 	}
 
+	/// <summary>
+	/// Добавляет дугу в диаграмму с предварительной валидацией:
+	/// проверяет существование портов и соответствие правилам потока данных.
+	/// </summary>
 	public Arc AddArc(Arc arc)
 	{
 		ArgumentNullException.ThrowIfNull(arc);
@@ -49,9 +73,12 @@ public sealed class Diagram
 		return arc;
 	}
 
+	/// <summary>Ищет ноду по идентификатору. Возвращает null, если не найдена.</summary>
 	public RectNode? TryGetNode(DiagramId nodeId) => _nodes.FirstOrDefault(n => n.Id == nodeId);
+	/// <summary>Ищет порт по идентификатору. Возвращает null, если не найден.</summary>
 	public Port? TryGetPort(DiagramId portId) => _ports.FirstOrDefault(p => p.Id == portId);
 
+	/// <summary>Сохраняет диаграмму в JSON-файл.</summary>
 	public void SaveToFile(string path)
 	{
 		var arcsData = _arcs.Select(a => new {
@@ -72,6 +99,11 @@ public sealed class Diagram
 		System.IO.File.WriteAllText(path, json);
 	}
 
+	/// <summary>
+	/// Равномерно распределяет порты на указанной стороне ноды.
+	/// Порты сортируются по текущему смещению, затем им присваиваются
+	/// равномерные смещения: 1/(n+1), 2/(n+1), ..., n/(n+1).
+	/// </summary>
 	private void DistributePortsProportionally(DiagramId nodeId, RectSide side)
 	{
 		var list = _ports
@@ -102,6 +134,10 @@ public sealed class Diagram
 		}
 	}
 
+	/// <summary>
+	/// Проверяет, что порты дуги существуют, что ноды допускают
+	/// исходящий/входящий поток данных через указанные стороны.
+	/// </summary>
 	private void ValidateArc(Arc arc)
 	{
 		var fromPort = TryGetPort(arc.FromPortId)

@@ -4,7 +4,9 @@ using System.Numerics;
 namespace SamorodinkaTech.GravityDiagram.NewModel;
 
 /// <summary>
-/// Axis-aligned rectangle (X, Y — левый верхний угол, Width, Height — размеры).
+/// Осино-выровненный прямоугольник (axis-aligned rectangle).
+/// X, Y — левый верхний угол, Width, Height — размеры.
+/// Используется для проверки пересечений дуг с узлами.
 /// </summary>
 public readonly record struct RectF(float X, float Y, float Width, float Height)
 {

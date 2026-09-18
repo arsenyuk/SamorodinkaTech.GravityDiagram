@@ -10,8 +10,14 @@ using Avalonia.Threading;
 
 namespace SamorodinkaTech.GravityDiagram.NewModel;
 
+/// <summary>
+/// Avalonia-контрол, отображающий физическую модель графа.
+/// Запускает симулирование на таймере (16 мс), рисует узлы, рёбра и дуги.
+/// Поддерживает перетаскивание узлов мышью.
+/// </summary>
 public sealed class ModelView : Control
 {
+    /// <summary>Физическая модель, отображаемая данным контролом.</summary>
     public PhysicsModel Model { get; set; } = new();
 
     private readonly DispatcherTimer _timer;
@@ -64,8 +70,13 @@ public sealed class ModelView : Control
             (_, _) => Tick());
     }
 
+    /// <summary>Включить ортогональную маршрутизацию дуг (иначе — прямые линии).</summary>
     public bool UseOrthogonalEdges = true;
 
+    /// <summary>
+    /// Загружает граф по индексу (0 = big A, 1 = big B), центрирует в текущем Bounds
+    /// и вычисляет ортогональные дуги.
+    /// </summary>
     public void LoadGraph(int index = 0)
     {
         var cx = (float)(Bounds.Width / 2);
@@ -94,6 +105,7 @@ public sealed class ModelView : Control
         ResetSimulation();
     }
 
+    /// <summary>Сбрасывает скорости узлов и перезапускает таймер симуляции.</summary>
     public void ResetSimulation()
     {
         Model.ResetVelocities();
@@ -208,6 +220,7 @@ public sealed class ModelView : Control
         _timer.Start();
     }
 
+    /// <summary>Основной цикл симуляции (вызывается DispatcherTimer каждые 16 мс).</summary>
     private void Tick()
     {
         try
@@ -238,6 +251,10 @@ public sealed class ModelView : Control
         }
     }
 
+    /// <summary>
+    /// Отрисовка фона, дуг (ортогональных полилиний), прямоугольников узлов,
+    /// зон отталкивания и портов.
+    /// </summary>
     public override void Render(DrawingContext context)
     {
         context.FillRectangle(Brushes.White, new Rect(Bounds.Size));
