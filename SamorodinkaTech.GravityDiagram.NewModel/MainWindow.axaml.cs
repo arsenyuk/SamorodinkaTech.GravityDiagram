@@ -27,8 +27,6 @@ public partial class MainWindow : Window
         };
 
         // Parameter sliders
-        BindSlider("RepulsionSSlider", "RepulsionSValue",
-            () => model.RepulsionS, v => model.RepulsionS = v, "F0");
         BindSlider("RepulsionPSlider", "RepulsionPValue",
             () => model.RepulsionP, v => model.RepulsionP = v, "F0");
         BindSlider("AttractionSlider", "AttractionValue",

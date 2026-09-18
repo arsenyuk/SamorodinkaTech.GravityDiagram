@@ -16,9 +16,7 @@ public sealed class PhysicsModel
     private const float BigNodeOffset = 350f;
     private const float SmallNodeOffset = 200f;
 
-    public float RepulsionS = 500f;
     public float RepulsionP = 10f;
-    public float UniversalRepulsionK = 10f;
     public float AttractionK = 0.001f;
     public float FrictionK = 0.99f;
     public bool UseJitter = true;
@@ -175,35 +173,5 @@ public sealed class PhysicsModel
 
         model.Edges.Add(new Edge(pA_right, pB_left));
         model.Edges.Add(new Edge(pB_right, pC_left));
-    }
-
-    public static void CreateFullyConnected(PhysicsModel model, float cx, float cy, int count)
-    {
-        model.Nodes.Clear();
-        model.Edges.Clear();
-        model.Arcs.Clear();
-
-        var labels = new[] { "A", "B", "C", "D", "E", "F" };
-        var radius = 100f + count * 20;
-
-        for (var i = 0; i < count; i++)
-        {
-            var angle = 2 * MathF.PI * i / count - MathF.PI / 2;
-            var x = cx + radius * MathF.Cos(angle);
-            var y = cy + radius * MathF.Sin(angle);
-            model.Nodes.Add(new PhysicsNode(labels[i], x, y));
-        }
-
-        for (var i = 0; i < count; i++)
-        {
-            var ni = model.Nodes[i];
-            var pi_right = MakePort($"{labels[i]}_right", ni, ni.Width / 2, 0);
-            for (var j = i + 1; j < count; j++)
-            {
-                var nj = model.Nodes[j];
-                var pj_left = MakePort($"{labels[j]}_left", nj, -nj.Width / 2, 0);
-                model.Edges.Add(new Edge(pi_right, pj_left));
-            }
-        }
     }
 }

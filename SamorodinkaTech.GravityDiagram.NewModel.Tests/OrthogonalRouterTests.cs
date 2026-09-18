@@ -1585,7 +1585,7 @@ public class OrthogonalRouterTests
         var nodes = new List<PhysicsNode>
         {
             new("A", -20, 0) { Width = 40, Height = 40 },
-            new("Obs", 100, 0) { Width = 40, Height = 80 },
+            new("Obs", 100, 100) { Width = 40, Height = 80 },
             new("B", 220, 0) { Width = 40, Height = 40 },
         };
         var route = OrthogonalRouter.ComputeRoute(
@@ -1602,7 +1602,7 @@ public class OrthogonalRouterTests
     {
         var nodes = new List<PhysicsNode>
         {
-            new("A", 220, 0) { Width = 40, Height = 40 },
+            new("A", 100, 0) { Width = 120, Height = 40 },
             new("Obs", 100, 0) { Width = 40, Height = 80 },
             new("B", -20, 0) { Width = 40, Height = 40 },
         };
@@ -1620,7 +1620,7 @@ public class OrthogonalRouterTests
     {
         var nodes = new List<PhysicsNode>
         {
-            new("A", 0, -20) { Width = 40, Height = 40 },
+            new("A", 0, 0) { Width = 40, Height = 80 },
             new("Obs", 0, 100) { Width = 80, Height = 40 },
             new("B", 0, 220) { Width = 40, Height = 40 },
         };
@@ -1638,7 +1638,7 @@ public class OrthogonalRouterTests
     {
         var nodes = new List<PhysicsNode>
         {
-            new("A", 0, 220) { Width = 40, Height = 40 },
+            new("A", 0, 100) { Width = 40, Height = 120 },
             new("Obs", 0, 100) { Width = 80, Height = 40 },
             new("B", 0, -20) { Width = 40, Height = 40 },
         };
@@ -1716,12 +1716,14 @@ public class OrthogonalRouterTests
         var route = OrthogonalRouter.ComputeRoute(
             new Vector2(40, 0), new Vector2(-120, 200), 0, 1, nodes);
 
+        Console.Error.WriteLine($"Route: [{string.Join(" → ", route.Select(p => $"({p.X:F0},{p.Y:F0})"))}]");
+
         AssertRouteValid(route, NodeRect(nodes[0]), 0, 1, nodes);
 
-        // Первый сегмент должен идти влево (к цели)
+        // Первый сегмент должен идти вверх/вниз (перпендикулярно порту, прочь от узла)
         var firstDir = route[1] - route[0];
-        Assert.True(firstDir.X < 0,
-            $"First segment should go left, but dir.X={firstDir.X}");
+        Assert.True(Math.Abs(firstDir.Y) > OrthogonalRouter.AxisTolerance,
+            $"First segment should go perpendicular to port, but dir.Y={firstDir.Y}");
     }
 
     /// <summary>
@@ -1737,6 +1739,8 @@ public class OrthogonalRouterTests
         };
         var route = OrthogonalRouter.ComputeRoute(
             new Vector2(40, 0), new Vector2(-120, 200), 0, 1, nodes);
+
+        Console.Error.WriteLine($"Route: [{string.Join(" → ", route.Select(p => $"({p.X:F0},{p.Y:F0})"))}]");
 
         AssertRouteValid(route, NodeRect(nodes[0]), 0, 1, nodes);
 
@@ -1793,6 +1797,143 @@ public class OrthogonalRouterTests
             Assert.False(
                 OrthogonalRouter.SegmentIntersectsRect(route[k], route[k + 1], obstacle),
                 $"Segment {k} ({route[k].X:F0},{route[k].Y:F0})→({route[k + 1].X:F0},{route[k + 1].Y:F0}) intersects obstacle");
+        }
+    }
+
+    // =====================================================================
+    // Тесты правил:
+    // 1. Одно преобразование за проход
+    // 2. Удаление коллинеарной точки — в последнем порядке
+    // 3. Сдвиг общей точки + вставка ортогонального отрезка
+    // =====================================================================
+
+    // --- MergeOneCollinear: удаляет одну точку за вызов ---
+
+    [Fact]
+    public void MergeOneCollinear_RemovesOnePoint()
+    {
+        // Три коллинеарные точки в одном направлении: (0,0)→(50,0)→(100,0)
+        var route = new List<Vector2> { new(0, 0), new(50, 0), new(100, 0) };
+
+        // Первый вызов удаляет (50,0)
+        var removed = OrthogonalRouter.MergeOneCollinear(route);
+        Assert.True(removed);
+        Assert.Equal(2, route.Count);
+        Assert.Equal(0f, route[0].X, 1);
+        Assert.Equal(100f, route[1].X, 1);
+
+        // Второй вызов — нечего удалять
+        removed = OrthogonalRouter.MergeOneCollinear(route);
+        Assert.False(removed);
+        Assert.Equal(2, route.Count);
+    }
+
+    [Fact]
+    public void MergeOneCollinear_DoesNotRemoveTurnPoint()
+    {
+        // Три точки с поворотом: (0,0)→(50,0)→(50,100)
+        var route = new List<Vector2> { new(0, 0), new(50, 0), new(50, 100) };
+
+        var removed = OrthogonalRouter.MergeOneCollinear(route);
+        Assert.False(removed);
+        Assert.Equal(3, route.Count);
+    }
+
+        var shifted = OrthogonalRouter.ShiftOneSharedPoint(route, 20f);
+        Assert.False(shifted);
+    }
+
+    [Fact]
+    public void ShiftOneSharedPoint_SkipsFirstAndLast()
+    {
+        var route = new List<Vector2> { new(0, 0), new(50, 0), new(100, 0) };
+
+        // k=0 (первая точка) — не должна сдвигаться
+        // ShiftOneSharedPoint начинает с k=1, поэтому первая точка не трогается
+        var shifted = OrthogonalRouter.ShiftOneSharedPoint(route, 20f);
+        Assert.True(shifted);
+        // После сдвига route = [(0,0), (70,0), (100,0)]
+        Assert.Equal(0f, route[0].X, 1); // первая не тронута
+        Assert.Equal(100f, route[2].X, 1); // последняя не тронута
+    }
+
+    // --- PushOneOutFromNodes: выталкивает одну точку за вызов ---
+
+    [Fact]
+    public void PushOneOutFromNodes_PushesOnePoint()
+    {
+        var nodes = new List<PhysicsNode>
+        {
+            new("A", 50, 0) { Width = 100, Height = 100 },
+        };
+        var route = new List<Vector2> { new(0, 0), new(50, 0), new(100, 0) };
+
+        var rectA = NodeRect(nodes[0]);
+        Assert.True(rectA.Contains(route[1]), "Point should be inside rect before push");
+
+        var pushed = OrthogonalRouter.PushOneOutFromNodes(route, nodes, -1, -1);
+        Assert.True(pushed);
+
+        // Точка вытолкнута за пределы rect
+        Assert.False(rectA.Contains(route[1]),
+            $"Point should be outside rect after push, got ({route[1].X:F1},{route[1].Y:F1})");
+    }
+
+    [Fact]
+    public void PushOneOutFromNodes_SkipsSourceAndTarget()
+    {
+        var nodes = new List<PhysicsNode>
+        {
+            new("A", 50, 0) { Width = 100, Height = 100 },
+        };
+        var route = new List<Vector2> { new(50, 0), new(50, 0), new(100, 0) };
+
+        // skipFromIdx=0, skipToIdx=2 — не проверяем точки 0 и 2
+        var pushed = OrthogonalRouter.PushOneOutFromNodes(route, nodes, 0, 2);
+        Assert.False(pushed);
+    }
+
+    // --- Порядок операций: collinear удаление после shift и pushout ---
+
+    [Fact]
+    public void ComputeRoute_CollinearDeletedAfterShiftAndPushout()
+    {
+        // Три горизонтальные точки: (0,0)→(50,0)→(100,0)
+        // После shift: (0,0)→(70,0)→(100,0) — collinear в одном направлении
+        // Collinear удаление должно произойти ПОСЛЕ shift
+        var route = new List<Vector2> { new(0, 0), new(50, 0), new(100, 0) };
+
+        // Сначала shift
+        OrthogonalRouter.ShiftSharedPoints(route, 20f);
+        Assert.Equal(3, route.Count); // после shift — 3 точки
+
+        // Потом collinear merge
+        var merged = OrthogonalRouter.MergeOneCollinear(route);
+        Assert.True(merged);
+        Assert.Equal(2, route.Count); // после merge — 2 точки
+    }
+
+    [Fact]
+    public void ComputeRoute_MergeAfterPushout_CleansUpCorrectly()
+    {
+        // Нода в центре, дуга обходит её.
+        // После pushout и merge — все сегменты ортогональны.
+        var nodes = new List<PhysicsNode>
+        {
+            new("A", -20, 0) { Width = 40, Height = 40 },
+            new("Obs", 100, 0) { Width = 40, Height = 80 },
+            new("B", 220, 0) { Width = 40, Height = 40 },
+        };
+        var route = OrthogonalRouter.ComputeRoute(
+            new Vector2(0, 0), new Vector2(200, 0), 0, 2, nodes);
+
+        // Все сегменты ортогональны
+        for (var k = 0; k < route.Count - 1; k++)
+        {
+            var horiz = Math.Abs(route[k].Y - route[k + 1].Y) < OrthogonalRouter.AxisTolerance;
+            var vert = Math.Abs(route[k].X - route[k + 1].X) < OrthogonalRouter.AxisTolerance;
+            Assert.True(horiz || vert,
+                $"Segment {k} not axis-aligned");
         }
     }
 }

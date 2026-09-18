@@ -121,12 +121,32 @@ public sealed class ModelView : Control
         }
     }
 
+    /// Удаляет один сегмент нулевой длины. Возвращает true если удалил.
+    private static bool RemoveOneZeroSegment(List<Vector2> points)
+    {
+        for (var k = points.Count - 2; k >= 0; k--)
+        {
+            if (Vector2.Distance(points[k], points[k + 1]) < 1f)
+            {
+                points.RemoveAt(k + 1);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// Сдвигает все точки на delta. Возвращает true если что-то сдвинул.
+    private static bool ShiftAllPoints(List<Vector2> points, Vector2 delta)
+    {
+        if (delta.LengthSquared() < 0.0001f) return false;
+        for (var k = 0; k < points.Count; k++)
+            points[k] += delta;
+        return true;
+    }
+
     /// <summary>
     /// Корректирует зафиксированные дуги после перемещения нод.
-    /// Правила:
-    /// 1. Первый сегмент идёт из порта в Zone 1 узла → сдвинуть дугу на 1px perpendicular + новый сегмент к порту
-    /// 2. Сегмент нулевой длины → удалить точку
-    /// 3. Коллинеарные сегменты в одну сторону → сдвинуть общую точку
+    /// За один вызов — одно преобразование.
     /// </summary>
     public void AdjustArcs()
     {
@@ -137,54 +157,30 @@ public sealed class ModelView : Control
             var points = arc.Points;
             if (points.Count < 2) continue;
 
-            // Правило 2: удаление сегментов нулевой длины
-            for (var k = points.Count - 2; k >= 0; k--)
-            {
-                if (Vector2.Distance(points[k], points[k + 1]) < 1f)
-                    points.RemoveAt(k + 1);
-            }
+            // Удаляем сегменты нулевой длины (по одному)
+            while (RemoveOneZeroSegment(points)) { }
 
             if (points.Count < 2) continue;
 
             // Восстанавливаем L-точку если потеряна
             if (points.Count == 2 && Math.Abs(points[0].Y - points[1].Y) > OrthogonalRouter.AxisTolerance)
-            {
                 points.Insert(1, new Vector2(points[1].X, points[0].Y));
-            }
 
             if (points.Count < 3) continue;
 
-            // Обновляем дугу: двигаем точки чтобы следовать за портами.
-            var fromPort = edge.From;
-            var toPort = edge.To;
-            var portPos = fromPort.GetWorldPosition();
-            var toPortPos = toPort.GetWorldPosition();
-
-            // Двигаем точки чтобы следовать за портами.
-            // Вся дуга сдвигается на sourceDelta, затем targetDelta корректирует последнюю точку.
+            // Сдвигаем все точки на sourceDelta
+            var portPos = edge.From.GetWorldPosition();
             var sourceDelta = portPos - points[0];
+            ShiftAllPoints(points, sourceDelta);
 
-            if (sourceDelta.LengthSquared() > 0.0001f)
-            {
-                // Сдвигаем все точки на sourceDelta
-                for (var k = 0; k < points.Count; k++)
-                    points[k] += sourceDelta;
-            }
-
-            // TargetDelta: корректируем последнюю точку (после sourceDelta)
+            // Корректируем последнюю точку на targetDelta
+            var toPortPos = edge.To.GetWorldPosition();
             var targetDelta = toPortPos - points[^1];
             if (targetDelta.LengthSquared() > 0.0001f)
-            {
                 points[^1] = toPortPos;
-            }
 
-            // Удаляем сегменты нулевой длины
-            for (var k = points.Count - 2; k >= 0; k--)
-            {
-                if (Vector2.Distance(points[k], points[k + 1]) < 1f)
-                    points.RemoveAt(k + 1);
-            }
-
+            // Удаляем сегменты нулевой длины (по одному)
+            while (RemoveOneZeroSegment(points)) { }
         }
     }
 

@@ -25,12 +25,6 @@
                     <Button x:Name="ParamsToggle" Content="Параметры модели" HorizontalAlignment="Stretch"/>
 
                     <StackPanel x:Name="ParamsPanel" IsVisible="False" Spacing="8" Margin="0,4,0,0">
-                        <TextBlock Text="S — макс. отталкивание" FontSize="12"/>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Slider x:Name="RepulsionSSlider" Width="160" Minimum="0" Maximum="5000" TickFrequency="10" />
-                            <TextBlock x:Name="RepulsionSValue" Width="60" VerticalAlignment="Center"/>
-                        </StackPanel>
-
                         <TextBlock Text="p — сила отталкивания" FontSize="12"/>
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Slider x:Name="RepulsionPSlider" Width="160" Minimum="0" Maximum="1000" TickFrequency="1" />
