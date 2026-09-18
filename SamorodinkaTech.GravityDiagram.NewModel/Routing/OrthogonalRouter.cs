@@ -106,21 +106,28 @@ public static class OrthogonalRouter
                                 continue;
 
                             // Обход исходной ноды: выходим наружу по нормали порта,
-                            // затем поворачиваем к цели.
-                            var margin = 20f;
-                            Vector2 exitDir;
-                            if (a.X <= rect.X) exitDir = new Vector2(-1, 0);
-                            else if (a.X >= rect.X + rect.Width) exitDir = new Vector2(1, 0);
-                            else if (a.Y <= rect.Y) exitDir = new Vector2(0, -1);
-                            else exitDir = new Vector2(0, 1);
+                            // затем идём вдоль стороны узла (вверх/вниз для гориз. порта),
+                            // и только потом поворачиваем к цели.
+                            var margin = Math.Max(rect.Width, rect.Height) / 2 + PushOutDistance + 1f;
+                            var exitPoint = a.X <= rect.X
+                                ? new Vector2(a.X - margin, a.Y)       // Left port → влево
+                                : a.X >= rect.X + rect.Width
+                                    ? new Vector2(a.X + margin, a.Y)   // Right port → вправо
+                                    : a.Y <= rect.Y
+                                        ? new Vector2(a.X, a.Y - margin) // Top port → вверх
+                                        : new Vector2(a.X, a.Y + margin); // Bottom port → вниз
 
-                            var exitPoint = a + exitDir * margin;
-                            var turnPoint = exitDir.X != 0
-                                ? new Vector2(exitPoint.X, b.Y)
-                                : new Vector2(b.X, exitPoint.Y);
+                            // Точка вдоль стороны узла: выходим за пределы rect по Y
+                            var cornerY = b.Y <= rect.Y + rect.Height / 2
+                                ? rect.Y - margin   // Цель ниже центра → идём сверху
+                                : rect.Y + rect.Height + margin; // Цель выше → снизу
+                            var alongSide = new Vector2(exitPoint.X, cornerY);
+
+                            // Поворот к цели
+                            var turnToTarget = new Vector2(b.X, cornerY);
 
                             route.RemoveAt(k);
-                            route.InsertRange(k, new[] { a, exitPoint, turnPoint, b });
+                            route.InsertRange(k, new[] { a, exitPoint, alongSide, turnToTarget, b });
                             fixedSomething = true;
                             break;
                         }

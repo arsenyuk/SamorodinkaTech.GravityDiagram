@@ -1094,4 +1094,181 @@ public class OrthogonalRouterTests
         Assert.Equal(end.X, arcs[0].Points[^1].X, 1);
         Assert.Equal(end.Y, arcs[0].Points[^1].Y, 1);
     }
+
+    // =====================================================================
+    // Горизонтальное расположение: A слева, B справа.
+    // Правый порт A → левый порт B.
+    // При сдвиге B влево дуга не должна заходить внутрь A.
+    // =====================================================================
+
+    [Fact]
+    public void Horizontal_AB_MoveBLeft_ArcDoesNotEnterA()
+    {
+        var a = new PhysicsNode("A", 0, 0) { Width = 80, Height = 80 };
+        var b = new PhysicsNode("B", 200, 0) { Width = 80, Height = 80 };
+
+        var portA = new Port("A_right", a, a.Width / 2, 0);  // (40, 0)
+        var portB = new Port("B_left", b, -b.Width / 2, 0);  // (160, 0)
+        var edge = new Edge(portA, portB);
+
+        var nodes = new List<PhysicsNode> { a, b };
+        var arcs = new List<Arc> { new(edge) };
+
+        arcs[0].Points = OrthogonalRouter.ComputeRoute(
+            portA.GetWorldPosition(), portB.GetWorldPosition(),
+            0, 1, nodes);
+
+        var initialCount = arcs[0].Points.Count;
+
+        // Сдвигаем B влево — левый порт B оказывается внутри A
+        // A rect: (-40,-40,80,80) → X: -40..40
+        // B.X=20 → portB.X = 20-40 = -20 (внутри A)
+        b.Position = new Vector2(20, 0);
+
+        arcs[0].Points = OrthogonalRouter.ComputeRoute(
+            portA.GetWorldPosition(), portB.GetWorldPosition(),
+            0, 1, nodes);
+
+        // Все сегменты ортогональны
+        for (var k = 0; k < arcs[0].Points.Count - 1; k++)
+        {
+            var p1 = arcs[0].Points[k];
+            var p2 = arcs[0].Points[k + 1];
+            var horiz = Math.Abs(p1.Y - p2.Y) < OrthogonalRouter.AxisTolerance;
+            var vert = Math.Abs(p1.X - p2.X) < OrthogonalRouter.AxisTolerance;
+            Assert.True(horiz || vert,
+                $"Segment {k} ({p1.X:F1},{p1.Y:F1})→({p2.X:F1},{p2.Y:F1}) is not axis-aligned");
+        }
+
+        // Промежуточные сегменты (не первый и не последний) не проходят через тело A
+        var rectA = new RectF(a.Position.X - a.Width / 2, a.Position.Y - a.Height / 2, a.Width, a.Height);
+        for (var k = 1; k < arcs[0].Points.Count - 2; k++)
+        {
+            Assert.False(
+                SegmentPassesThroughRect(arcs[0].Points[k], arcs[0].Points[k + 1], rectA),
+                $"Segment {k} passes through node A");
+        }
+
+        // Первая точка = порт A, последняя = порт B
+        var start = portA.GetWorldPosition();
+        var end = portB.GetWorldPosition();
+        Assert.Equal(start.X, arcs[0].Points[0].X, 1);
+        Assert.Equal(start.Y, arcs[0].Points[0].Y, 1);
+        Assert.Equal(end.X, arcs[0].Points[^1].X, 1);
+        Assert.Equal(end.Y, arcs[0].Points[^1].Y, 1);
+    }
+
+    // =====================================================================
+    // Горизонтальное расположение: A слева, B справа.
+    // Левый порт B → правый порт A (обратная дуга).
+    // При сдвиге A вправо дуга не должна заходить внутрь B.
+    // =====================================================================
+
+    [Fact]
+    public void Horizontal_BA_MoveARight_ArcDoesNotEnterB()
+    {
+        var a = new PhysicsNode("A", 0, 0) { Width = 80, Height = 80 };
+        var b = new PhysicsNode("B", 200, 0) { Width = 80, Height = 80 };
+
+        var portB = new Port("B_right", b, b.Width / 2, 0);  // (240, 0)
+        var portA = new Port("A_left", a, -a.Width / 2, 0);  // (-40, 0)
+        var edge = new Edge(portB, portA);
+
+        var nodes = new List<PhysicsNode> { a, b };
+        var arcs = new List<Arc> { new(edge) };
+
+        arcs[0].Points = OrthogonalRouter.ComputeRoute(
+            portB.GetWorldPosition(), portA.GetWorldPosition(),
+            1, 0, nodes);
+
+        // Сдвигаем A вправо — правый порт A оказывается внутри B
+        // B rect: (160,-40,80,80) → X: 160..240
+        // A.X=180 → portA.X = 180+40 = 220 (внутри B)
+        a.Position = new Vector2(180, 0);
+
+        arcs[0].Points = OrthogonalRouter.ComputeRoute(
+            portB.GetWorldPosition(), portA.GetWorldPosition(),
+            1, 0, nodes);
+
+        // Все сегменты ортогональны
+        for (var k = 0; k < arcs[0].Points.Count - 1; k++)
+        {
+            var p1 = arcs[0].Points[k];
+            var p2 = arcs[0].Points[k + 1];
+            var horiz = Math.Abs(p1.Y - p2.Y) < OrthogonalRouter.AxisTolerance;
+            var vert = Math.Abs(p1.X - p2.X) < OrthogonalRouter.AxisTolerance;
+            Assert.True(horiz || vert,
+                $"Segment {k} ({p1.X:F1},{p1.Y:F1})→({p2.X:F1},{p2.Y:F1}) is not axis-aligned");
+        }
+
+        // Промежуточные сегменты (не первый и не последний) не проходят через тело B
+        var rectB = new RectF(b.Position.X - b.Width / 2, b.Position.Y - b.Height / 2, b.Width, b.Height);
+        for (var k = 1; k < arcs[0].Points.Count - 2; k++)
+        {
+            Assert.False(
+                SegmentPassesThroughRect(arcs[0].Points[k], arcs[0].Points[k + 1], rectB),
+                $"Segment {k} passes through node B");
+        }
+
+        // Первая точка = порт B, последняя = порт A
+        var start = portB.GetWorldPosition();
+        var end = portA.GetWorldPosition();
+        Assert.Equal(start.X, arcs[0].Points[0].X, 1);
+        Assert.Equal(start.Y, arcs[0].Points[0].Y, 1);
+        Assert.Equal(end.X, arcs[0].Points[^1].X, 1);
+        Assert.Equal(end.Y, arcs[0].Points[^1].Y, 1);
+    }
+
+    /// <summary>
+    /// Проверяет, что отрезок a→b проходит через внутренность rect
+    /// (не просто касается границы).
+    /// </summary>
+    private static bool SegmentPassesThroughRect(Vector2 a, Vector2 b, RectF rect)
+    {
+        var minX = rect.X;
+        var maxX = rect.X + rect.Width;
+        var minY = rect.Y;
+        var maxY = rect.Y + rect.Height;
+
+        // Горизонтальный сегмент
+        if (Math.Abs(a.Y - b.Y) < OrthogonalRouter.AxisTolerance)
+        {
+            var cy = a.Y;
+            if (cy > minY && cy < maxY)
+            {
+                var cxMin = Math.Min(a.X, b.X);
+                var cxMax = Math.Max(a.X, b.X);
+                // Сегмент пересекает rect если его X-диапазон перекрывается с rect
+                // и хотя бы одна точка внутри rect (не на границе)
+                if (cxMin < maxX && cxMax > minX)
+                {
+                    // Проверяем что сегмент gerçekten внутри (не только на границе)
+                    var insideStart = a.X > minX && a.X < maxX;
+                    var insideEnd = b.X > minX && b.X < maxX;
+                    if (insideStart || insideEnd) return true;
+                    // Или сегмент проходит сквозь rect
+                    if (cxMin < minX && cxMax > maxX) return true;
+                }
+            }
+        }
+        // Вертикальный сегмент
+        else if (Math.Abs(a.X - b.X) < OrthogonalRouter.AxisTolerance)
+        {
+            var cx = a.X;
+            if (cx > minX && cx < maxX)
+            {
+                var cyMin = Math.Min(a.Y, b.Y);
+                var cyMax = Math.Max(a.Y, b.Y);
+                if (cyMin < maxY && cyMax > minY)
+                {
+                    var insideStart = a.Y > minY && a.Y < maxY;
+                    var insideEnd = b.Y > minY && b.Y < maxY;
+                    if (insideStart || insideEnd) return true;
+                    if (cyMin < minY && cyMax > maxY) return true;
+                }
+            }
+        }
+
+        return false;
+    }
 }
