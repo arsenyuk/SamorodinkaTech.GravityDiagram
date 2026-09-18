@@ -1190,6 +1190,7 @@ public class OrthogonalRouterTests
             portB.GetWorldPosition(), portA.GetWorldPosition(),
             1, 0, nodes);
 
+
         // Все сегменты ортогональны
         for (var k = 0; k < arcs[0].Points.Count - 1; k++)
         {
@@ -1398,30 +1399,17 @@ public class OrthogonalRouterTests
     [Fact]
     public void ThreeNodesHorizontally_BC_DetourProducesAxisAlignedRoute()
     {
-        var nodes = new List<PhysicsNode>
-        {
-            new("A", 0, 0) { Width = 160, Height = 80 },
-            new("B", 300, 0) { Width = 160, Height = 80 },
-            new("C", 600, 0) { Width = 160, Height = 80 },
-        };
-
-        var portB = new Port("B_right", nodes[1], nodes[1].Width / 2, 0);  // (380, 0)
-        var portC = new Port("C_left", nodes[2], -nodes[2].Width / 2, 0);  // (520, 0)
-        var edge = new Edge(portB, portC);
-
-        // Начальный маршрут: прямая (380,0)→(520,0)
+        // Воспроизведение сценария из DEBUG-вывода:
+        // B(300,0), C(600,0) — горизонтально. Дуга B→C.
+        // C смещена влево(150,100) — порт C=(70,100), маршрут проходит через B.
         var route = OrthogonalRouter.ComputeRoute(
-            portB.GetWorldPosition(), portC.GetWorldPosition(),
-            1, 2, nodes);
-
-        // Сдвигаем C влево и вниз — порт C оказывается левее B
-        // B rect: (220,-40,160,80) → X: 220..380, Y: -40..40
-        // C.X=150 → portC.X = 150-80 = 70 (левее B, но маршрут проходит через B)
-        nodes[2].Position = new Vector2(150, 100);
-
-        route = OrthogonalRouter.ComputeRoute(
-            portB.GetWorldPosition(), portC.GetWorldPosition(),
-            1, 2, nodes);
+            new Vector2(380f, 0f), new Vector2(70f, 100f), 1, 2,
+            new List<PhysicsNode>
+            {
+                new("A", 0, 0) { Width = 160, Height = 80 },
+                new("B", 300, 0) { Width = 160, Height = 80 },
+                new("C", 150, 100) { Width = 160, Height = 80 },
+            });
 
         // Все сегменты ортогональны
         for (var k = 0; k < route.Count - 1; k++)
@@ -1433,9 +1421,7 @@ public class OrthogonalRouterTests
         }
 
         // Ни один сегмент не пересекает B
-        var rectB = new RectF(nodes[1].Position.X - nodes[1].Width / 2,
-            nodes[1].Position.Y - nodes[1].Height / 2,
-            nodes[1].Width, nodes[1].Height);
+        var rectB = new RectF(220f, -40f, 160f, 80f);
         for (var k = 0; k < route.Count - 1; k++)
         {
             Assert.False(
@@ -1444,8 +1430,8 @@ public class OrthogonalRouterTests
         }
 
         // Первая точка = порт B, последняя = порт C
-        Assert.Equal(portB.GetWorldPosition().X, route[0].X, 1);
-        Assert.Equal(portC.GetWorldPosition().X, route[^1].X, 1);
+        Assert.Equal(380f, route[0].X, 1);
+        Assert.Equal(70f, route[^1].X, 1);
     }
 
     // =====================================================================
@@ -1496,6 +1482,317 @@ public class OrthogonalRouterTests
         {
             Assert.False(rectA.Contains(route[k]),
                 $"Point {k} inside A rect");
+        }
+    }
+
+    // Горизонтальный сегмент пересекает rect ноды
+    [Fact]
+    public void SegmentIntersectsRect_Horizontal()
+    {
+        var rect = new RectF(100, -50, 100, 100); // (100,-50)→(200,50)
+        Assert.True(OrthogonalRouter.SegmentIntersectsRect(
+            new Vector2(50, 0), new Vector2(250, 0), rect));
+    }
+
+    // Вертикальный сегмент пересекает rect ноды
+    [Fact]
+    public void SegmentIntersectsRect_Vertical()
+    {
+        var rect = new RectF(-50, 100, 100, 100); // (-50,100)→(50,200)
+        Assert.True(OrthogonalRouter.SegmentIntersectsRect(
+            new Vector2(0, 50), new Vector2(0, 250), rect));
+    }
+
+    // Горизонтальный сегмент касается rect по границе — не пересекает
+    [Fact]
+    public void SegmentIntersectsRect_Horizontal_TouchesBoundary()
+    {
+        var rect = new RectF(100, -50, 100, 100); // (100,-50)→(200,50)
+        // Сегмент на нижней границе rect (Y=50)
+        Assert.False(OrthogonalRouter.SegmentIntersectsRect(
+            new Vector2(50, 50), new Vector2(250, 50), rect));
+    }
+
+    // Вертикальный сегмент касается rect по границе — не пересекает
+    [Fact]
+    public void SegmentIntersectsRect_Vertical_TouchesBoundary()
+    {
+        var rect = new RectF(-50, 100, 100, 100); // (-50,100)→(50,200)
+        // Сегмент на правой границе rect (X=50)
+        Assert.False(OrthogonalRouter.SegmentIntersectsRect(
+            new Vector2(50, 50), new Vector2(50, 250), rect));
+    }
+
+    // =====================================================================
+    // Тест из пойманного DEBUG-состояния:
+    // Горизонтальный сегмент (560,350)→(763,350) заканчивается на границе rect (763,310,160,80).
+    // ComputeDetour не должен создавать петлю через rect.
+    // =====================================================================
+
+    [Fact]
+    public void ComputeDetour_SegmentEndsAtRectBoundary_NoLoop()
+    {
+        var a = new Vector2(560f, 350f);
+        var b = new Vector2(763f, 350f);
+        var rect = new RectF(763f, 310f, 160f, 80f);
+
+        // Прямой сегмент не пересекает rect (касается границы)
+        Assert.False(OrthogonalRouter.SegmentIntersectsRect(a, b, rect));
+        // Сегмент на границе rect тоже не пересекает
+        Assert.False(OrthogonalRouter.SegmentIntersectsRect(
+            new Vector2(380, 350), new Vector2(400, 350),
+            new RectF(400, 310, 160, 80)));
+
+        // Но ComputeRoute всё равно должен обработать этот случай
+        var nodes = new List<PhysicsNode>
+        {
+            new("A", 480, 350) { Width = 160, Height = 80 },
+            new("B", 843, 350) { Width = 160, Height = 80 },
+        };
+
+        var route = OrthogonalRouter.ComputeRoute(a, b, 0, 1, nodes);
+
+        // Все сегменты ортогональны
+        for (var k = 0; k < route.Count - 1; k++)
+        {
+            var horiz = Math.Abs(route[k].Y - route[k + 1].Y) < OrthogonalRouter.AxisTolerance;
+            var vert = Math.Abs(route[k].X - route[k + 1].X) < OrthogonalRouter.AxisTolerance;
+            Assert.True(horiz || vert,
+                $"Segment {k} ({route[k].X:F1},{route[k].Y:F1})→({route[k + 1].X:F1},{route[k + 1].Y:F1}) not axis-aligned");
+        }
+
+        // Ни один сегмент не пересекает rect
+        for (var k = 0; k < route.Count - 1; k++)
+        {
+            Assert.False(
+                OrthogonalRouter.SegmentIntersectsRect(route[k], route[k + 1], rect),
+                $"Segment {k} intersects rect");
+        }
+    }
+
+    // =====================================================================
+    // Пошаговые тесты ComputeDetour через ComputeRoute
+    // =====================================================================
+
+    /// <summary>
+    /// Горизонтальный сегмент слева→справа пересекает ноду B.
+    /// Обход должен идти сверху или снизу.
+    /// </summary>
+    [Fact]
+    public void Detour_Horizontal_CrossesNode_FromLeft()
+    {
+        // a=(0,0) b=(200,0), нода B посередине: rect=(80,-40,40,80)
+        var nodes = new List<PhysicsNode>
+        {
+            new("A", -20, 0) { Width = 40, Height = 40 },
+            new("Obs", 100, 0) { Width = 40, Height = 80 },
+            new("B", 220, 0) { Width = 40, Height = 40 },
+        };
+        var route = OrthogonalRouter.ComputeRoute(
+            new Vector2(0, 0), new Vector2(200, 0), 0, 2, nodes);
+
+        AssertRouteValid(route, NodeRect(nodes[1]), 0, 2, nodes);
+    }
+
+    /// <summary>
+    /// Горизонтальный сегмент справа→влево пересекает ноду.
+    /// </summary>
+    [Fact]
+    public void Detour_Horizontal_CrossesNode_FromRight()
+    {
+        var nodes = new List<PhysicsNode>
+        {
+            new("A", 220, 0) { Width = 40, Height = 40 },
+            new("Obs", 100, 0) { Width = 40, Height = 80 },
+            new("B", -20, 0) { Width = 40, Height = 40 },
+        };
+        var route = OrthogonalRouter.ComputeRoute(
+            new Vector2(200, 0), new Vector2(0, 0), 0, 2, nodes);
+
+        AssertRouteValid(route, NodeRect(nodes[1]), 0, 2, nodes);
+    }
+
+    /// <summary>
+    /// Вертикальный сегмент сверху→вниз пересекает ноду.
+    /// </summary>
+    [Fact]
+    public void Detour_Vertical_CrossesNode_FromTop()
+    {
+        var nodes = new List<PhysicsNode>
+        {
+            new("A", 0, -20) { Width = 40, Height = 40 },
+            new("Obs", 0, 100) { Width = 80, Height = 40 },
+            new("B", 0, 220) { Width = 40, Height = 40 },
+        };
+        var route = OrthogonalRouter.ComputeRoute(
+            new Vector2(0, 0), new Vector2(0, 200), 0, 2, nodes);
+
+        AssertRouteValid(route, NodeRect(nodes[1]), 0, 2, nodes);
+    }
+
+    /// <summary>
+    /// Вертикальный сегмент снизу→вверх пересекает ноду.
+    /// </summary>
+    [Fact]
+    public void Detour_Vertical_CrossesNode_FromBottom()
+    {
+        var nodes = new List<PhysicsNode>
+        {
+            new("A", 0, 220) { Width = 40, Height = 40 },
+            new("Obs", 0, 100) { Width = 80, Height = 40 },
+            new("B", 0, -20) { Width = 40, Height = 40 },
+        };
+        var route = OrthogonalRouter.ComputeRoute(
+            new Vector2(0, 200), new Vector2(0, 0), 0, 2, nodes);
+
+        AssertRouteValid(route, NodeRect(nodes[1]), 0, 2, nodes);
+    }
+
+    /// <summary>
+    /// Горизонтальный сегмент, цель на границе rect сверху.
+    /// </summary>
+    [Fact]
+    public void Detour_Horizontal_TargetOnNodeBoundary_Top()
+    {
+        // Нода B: rect=(100,-40,40,80). Цель b=(100,-40) — на верхней границе.
+        var nodes = new List<PhysicsNode>
+        {
+            new("A", -20, 0) { Width = 40, Height = 40 },
+            new("B", 120, 0) { Width = 40, Height = 80 },
+        };
+        var route = OrthogonalRouter.ComputeRoute(
+            new Vector2(0, 0), new Vector2(100, -40), 0, 1, nodes);
+
+        AssertRouteValid(route, NodeRect(nodes[0]), 0, 1, nodes);
+    }
+
+    /// <summary>
+    /// Горизонтальный сегмент, цель на границе rect снизу.
+    /// </summary>
+    [Fact]
+    public void Detour_Horizontal_TargetOnNodeBoundary_Bottom()
+    {
+        var nodes = new List<PhysicsNode>
+        {
+            new("A", -20, 0) { Width = 40, Height = 40 },
+            new("B", 120, 0) { Width = 40, Height = 80 },
+        };
+        var route = OrthogonalRouter.ComputeRoute(
+            new Vector2(0, 0), new Vector2(100, 40), 0, 1, nodes);
+
+        AssertRouteValid(route, NodeRect(nodes[0]), 0, 1, nodes);
+    }
+
+    /// <summary>
+    /// Горизонтальный сегмент, цель внутри rect.
+    /// </summary>
+    [Fact]
+    public void Detour_Horizontal_TargetInsideNode()
+    {
+        var nodes = new List<PhysicsNode>
+        {
+            new("A", -20, 0) { Width = 40, Height = 40 },
+            new("B", 120, 0) { Width = 40, Height = 80 },
+        };
+        var route = OrthogonalRouter.ComputeRoute(
+            new Vector2(0, 0), new Vector2(100, 0), 0, 1, nodes);
+
+        AssertRouteValid(route, NodeRect(nodes[0]), 0, 1, nodes);
+    }
+
+    /// <summary>
+    /// Source node detour: первый сегмент входит в исходную ноду.
+    /// Маршрут должен идти влево к цели.
+    /// </summary>
+    [Fact]
+    public void Detour_SourceNode_FirstSegmentEntersSource()
+    {
+        // A справа, B слева. Правый порт A=(40,0) → левый порт B=(-120,200).
+        var nodes = new List<PhysicsNode>
+        {
+            new("A", 0, 0) { Width = 80, Height = 80 },
+            new("B", -80, 200) { Width = 80, Height = 80 },
+        };
+        var route = OrthogonalRouter.ComputeRoute(
+            new Vector2(40, 0), new Vector2(-120, 200), 0, 1, nodes);
+
+        AssertRouteValid(route, NodeRect(nodes[0]), 0, 1, nodes);
+
+        // Первый сегмент должен идти влево (к цели)
+        var firstDir = route[1] - route[0];
+        Assert.True(firstDir.X < 0,
+            $"First segment should go left, but dir.X={firstDir.X}");
+    }
+
+    /// <summary>
+    /// Source node detour: цель внизу и слева — нет петли.
+    /// </summary>
+    [Fact]
+    public void Detour_SourceNode_TargetBelowAndLeft_NoLoop()
+    {
+        var nodes = new List<PhysicsNode>
+        {
+            new("A", 0, 0) { Width = 80, Height = 80 },
+            new("B", -80, 200) { Width = 80, Height = 80 },
+        };
+        var route = OrthogonalRouter.ComputeRoute(
+            new Vector2(40, 0), new Vector2(-120, 200), 0, 1, nodes);
+
+        AssertRouteValid(route, NodeRect(nodes[0]), 0, 1, nodes);
+
+        // Нет горизонтальных сегментов вправо
+        for (var k = 0; k < route.Count - 1; k++)
+        {
+            var dx = route[k + 1].X - route[k].X;
+            if (Math.Abs(dx) > OrthogonalRouter.AxisTolerance)
+            {
+                Assert.True(dx < 0,
+                    $"Segment {k} goes right ({dx}) — loop!");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Вертикальный source node detour.
+    /// </summary>
+    [Fact]
+    public void Detour_SourceNode_Vertical_FirstSegmentEntersSource()
+    {
+        var nodes = new List<PhysicsNode>
+        {
+            new("A", 0, 0) { Width = 80, Height = 80 },
+            new("B", 200, -80) { Width = 80, Height = 80 },
+        };
+        var route = OrthogonalRouter.ComputeRoute(
+            new Vector2(0, 40), new Vector2(200, -120), 0, 1, nodes);
+
+        AssertRouteValid(route, NodeRect(nodes[0]), 0, 1, nodes);
+    }
+
+    private static RectF NodeRect(PhysicsNode node)
+        => new(node.Position.X - node.Width / 2, node.Position.Y - node.Height / 2, node.Width, node.Height);
+
+    /// <summary>
+    /// Хелпер: проверяет что маршрут ортогонален и не пересекает obstacle.
+    /// </summary>
+    private static void AssertRouteValid(List<Vector2> route, RectF obstacle,
+        int fromIdx, int toIdx, List<PhysicsNode> nodes)
+    {
+        // Все сегменты ортогональны
+        for (var k = 0; k < route.Count - 1; k++)
+        {
+            var horiz = Math.Abs(route[k].Y - route[k + 1].Y) < OrthogonalRouter.AxisTolerance;
+            var vert = Math.Abs(route[k].X - route[k + 1].X) < OrthogonalRouter.AxisTolerance;
+            Assert.True(horiz || vert,
+                $"Segment {k} ({route[k].X:F1},{route[k].Y:F1})→({route[k + 1].X:F1},{route[k + 1].Y:F1}) not axis-aligned");
+        }
+
+        // Ни один сегмент не пересекает obstacle
+        for (var k = 0; k < route.Count - 1; k++)
+        {
+            Assert.False(
+                OrthogonalRouter.SegmentIntersectsRect(route[k], route[k + 1], obstacle),
+                $"Segment {k} ({route[k].X:F0},{route[k].Y:F0})→({route[k + 1].X:F0},{route[k + 1].Y:F0}) intersects obstacle");
         }
     }
 }

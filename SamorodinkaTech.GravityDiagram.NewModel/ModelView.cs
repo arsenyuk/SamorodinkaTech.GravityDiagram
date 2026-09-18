@@ -12,14 +12,11 @@ namespace SamorodinkaTech.GravityDiagram.NewModel;
 
 public sealed class ModelView : Control
 {
-    public PhysicsModel Model { get; } = new();
+    public PhysicsModel Model { get; set; } = new();
 
     private readonly DispatcherTimer _timer;
     private DateTime _lastTickAt;
     private bool _firstSize = true;
-
-    // Кэш позиций портов для определения необходимости пересчёта дуг
-    private readonly List<Vector2> _lastPortPositions = new();
 
     private const float SimSpeed = 60f;
     private const float MaxSubstepDt = 1f / 60f;
@@ -105,37 +102,11 @@ public sealed class ModelView : Control
     }
 
     /// <summary>
-    /// Пересчитывает все ортогональные дуги, только если позиции портов изменились.
+    /// Пересчитывает все ортогональные дуги.
     /// </summary>
     private void RecomputeArcs()
     {
         if (!UseOrthogonalEdges) return;
-
-        // Собираем текущие позиции всех портов
-        var currentPositions = new List<Vector2>(Model.Edges.Count * 2);
-        foreach (var edge in Model.Edges)
-        {
-            currentPositions.Add(edge.From.GetWorldPosition());
-            currentPositions.Add(edge.To.GetWorldPosition());
-        }
-
-        // Сравниваем с кэшем — если не изменились, не пересчитываем
-        if (_lastPortPositions.Count == currentPositions.Count)
-        {
-            var changed = false;
-            for (var i = 0; i < currentPositions.Count; i++)
-            {
-                if (Vector2.Distance(_lastPortPositions[i], currentPositions[i]) > 0.5f)
-                {
-                    changed = true;
-                    break;
-                }
-            }
-            if (!changed) return;
-        }
-
-        _lastPortPositions.Clear();
-        _lastPortPositions.AddRange(currentPositions);
 
         Model.Arcs.Clear();
         foreach (var edge in Model.Edges)
@@ -183,36 +154,37 @@ public sealed class ModelView : Control
 
             if (points.Count < 3) continue;
 
-            // Правило 1: первый сегмент идёт из порта в Zone 1
-            var fromNode = edge.From.Node;
-            var port = fromNode.PortRight;
+            // Обновляем дугу: двигаем точки чтобы следовать за портами.
+            var fromPort = edge.From;
+            var toPort = edge.To;
+            var portPos = fromPort.GetWorldPosition();
+            var toPortPos = toPort.GetWorldPosition();
 
-            var fromRect = new RectF(
-                fromNode.Position.X - fromNode.Width / 2,
-                fromNode.Position.Y - fromNode.Height / 2,
-                fromNode.Width,
-                fromNode.Height);
+            // Двигаем точки чтобы следовать за портами.
+            // Вся дуга сдвигается на sourceDelta, затем targetDelta корректирует последнюю точку.
+            var sourceDelta = portPos - points[0];
 
-            // Проверяем: точка[1] (первый拐角) внутри Zone 1?
-            var corner = points[1];
-            if (fromRect.Contains(corner))
+            if (sourceDelta.LengthSquared() > 0.0001f)
             {
-                // Сдвигаем拐角 perpendicular к первому сегменту
-                var dx = corner.X - points[0].X;
-                var dy = corner.Y - points[0].Y;
-                Vector2 perp;
-                if (Math.Abs(dx) > Math.Abs(dy))
-                    perp = new Vector2(0, dy > 0 ? -1 : 1); // горизонтальный →垂直ный сдвиг
-                else
-                    perp = new Vector2(dx > 0 ? -1 : 1, 0); // вертикальный → горизонтальный сдвиг
-
-                // Сдвигаем拐角 и все последующие точки
-                for (var k = 1; k < points.Count; k++)
-                    points[k] += perp;
-
-                // Добавляем новый сегмент от порта к сдвинутой точке
-                points.Insert(0, port);
+                // Сдвигаем все точки на sourceDelta
+                for (var k = 0; k < points.Count; k++)
+                    points[k] += sourceDelta;
             }
+
+            // TargetDelta: корректируем последнюю точку (после sourceDelta)
+            var targetDelta = toPortPos - points[^1];
+            if (targetDelta.LengthSquared() > 0.0001f)
+            {
+                points[^1] = toPortPos;
+            }
+
+            // Удаляем сегменты нулевой длины
+            for (var k = points.Count - 2; k >= 0; k--)
+            {
+                if (Vector2.Distance(points[k], points[k + 1]) < 1f)
+                    points.RemoveAt(k + 1);
+            }
+
         }
     }
 
@@ -259,7 +231,7 @@ public sealed class ModelView : Control
             for (var i = 0; i < steps; i++)
                 Model.Step(subDt);
 
-            // Пересчитываем дуги на основе текущих позиций портов
+            // Пересчитываем дуги (с кэшированием — при значительном движении нод)
             RecomputeArcs();
 
             InvalidateVisual();
@@ -391,8 +363,8 @@ public sealed class ModelView : Control
             (float)pos.Y + _dragOffset.Y);
         _dragNode.Velocity = Vector2.Zero;
 
-        // Пересчитываем дуги при перетаскивании ноды
-        RecomputeArcs();
+        // Корректируем дуги при перетаскивании ноды
+        AdjustArcs();
 
         InvalidateVisual();
     }

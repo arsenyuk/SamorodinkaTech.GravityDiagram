@@ -70,6 +70,10 @@ The key invariant: **no arc segment should pass through a node interior**. Tests
 
 - **AnalyzeDump** — loads the latest dump from AppData, replays 120 engine steps, checks for arc-segment-vs-node-interior violations. Exit code 0 = clean, 1 = violations found.
 
+## Rules
+
+- Nothing is cached — all computations are fresh every time
+
 ## Conventions
 
 - Node positions are **center-based** (not top-left). `RectF` stores `(X, Y, Width, Height)` where X,Y is the top-left corner.
