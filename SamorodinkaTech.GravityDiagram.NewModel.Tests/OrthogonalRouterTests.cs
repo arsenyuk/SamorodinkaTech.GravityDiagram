@@ -1271,4 +1271,231 @@ public class OrthogonalRouterTests
 
         return false;
     }
+
+    // =====================================================================
+    // Горизонтальная дуга через ноду: цель по Y не совпадает с портом.
+    // Детур должен дать строго ортогональные сегменты (нет петли).
+    // =====================================================================
+
+    [Fact]
+    public void DetourAroundSourceNode_AllSegmentsAxisAligned()
+    {
+        // A справа, B слева и ниже. Правый порт A → левый порт B.
+        // Дуга (80,0)→(-100,200) проходит через тело A.
+        var a = new PhysicsNode("A", 0, 0) { Width = 80, Height = 80 };
+        var b = new PhysicsNode("B", -100, 200) { Width = 80, Height = 80 };
+
+        var portA = new Port("A_right", a, a.Width / 2, 0);   // (40, 0)
+        var portB = new Port("B_left", b, -b.Width / 2, 0);   // (-140, 200)
+        var edge = new Edge(portA, portB);
+
+        var nodes = new List<PhysicsNode> { a, b };
+        var arcs = new List<Arc> { new(edge) };
+
+        arcs[0].Points = OrthogonalRouter.ComputeRoute(
+            portA.GetWorldPosition(), portB.GetWorldPosition(),
+            0, 1, nodes);
+
+        // Все сегменты строго ортогональны
+        for (var k = 0; k < arcs[0].Points.Count - 1; k++)
+        {
+            var p1 = arcs[0].Points[k];
+            var p2 = arcs[0].Points[k + 1];
+            var horiz = Math.Abs(p1.Y - p2.Y) < OrthogonalRouter.AxisTolerance;
+            var vert = Math.Abs(p1.X - p2.X) < OrthogonalRouter.AxisTolerance;
+            Assert.True(horiz || vert,
+                $"Segment {k} ({p1.X:F1},{p1.Y:F1})→({p2.X:F1},{p2.Y:F1}) is not axis-aligned");
+        }
+
+        // Нет петли: горизонтальные сегменты идут влево к цели
+        for (var k = 0; k < arcs[0].Points.Count - 1; k++)
+        {
+            var dx = arcs[0].Points[k + 1].X - arcs[0].Points[k].X;
+            if (Math.Abs(dx) > OrthogonalRouter.AxisTolerance)
+            {
+                Assert.True(dx < 0,
+                    $"Horizontal segment {k} goes right ({dx:F1}) instead of left toward target");
+            }
+        }
+
+        // Промежуточные точки вне rect A
+        var rectA = new RectF(a.Position.X - a.Width / 2, a.Position.Y - a.Height / 2, a.Width, a.Height);
+        for (var k = 1; k < arcs[0].Points.Count - 1; k++)
+        {
+            Assert.False(rectA.Contains(arcs[0].Points[k]),
+                $"Point {k} inside A rect");
+        }
+    }
+
+    // =====================================================================
+    // Простой случай: B ниже A, Right-порты.
+    // Дуга A→B через правый порт A и левый порт B.
+    // B смещён влево так, что порт B внутри A.
+    // Детур не должен создавать петлю вправо.
+    // =====================================================================
+
+    [Fact]
+    public void SimpleCase_BelowA_RightPorts_NoLoop()
+    {
+        var a = new PhysicsNode("A", 0, 0) { Width = 80, Height = 80 };
+        var b = new PhysicsNode("B", 0, 200) { Width = 80, Height = 80 };
+
+        var portA = new Port("A_right", a, a.Width / 2, 0);  // (40, 0)
+        var portB = new Port("B_left", b, -b.Width / 2, 0);  // (-40, 200)
+        var edge = new Edge(portA, portB);
+
+        var nodes = new List<PhysicsNode> { a, b };
+        var arcs = new List<Arc> { new(edge) };
+
+        // Начальный маршрут
+        arcs[0].Points = OrthogonalRouter.ComputeRoute(
+            portA.GetWorldPosition(), portB.GetWorldPosition(),
+            0, 1, nodes);
+
+        // Сдвигаем B влево — порт B оказывается внутри A
+        b.Position = new Vector2(-20, 200);
+
+        arcs[0].Points = OrthogonalRouter.ComputeRoute(
+            portA.GetWorldPosition(), portB.GetWorldPosition(),
+            0, 1, nodes);
+
+        // Все сегменты ортогональны
+        for (var k = 0; k < arcs[0].Points.Count - 1; k++)
+        {
+            var p1 = arcs[0].Points[k];
+            var p2 = arcs[0].Points[k + 1];
+            var horiz = Math.Abs(p1.Y - p2.Y) < OrthogonalRouter.AxisTolerance;
+            var vert = Math.Abs(p1.X - p2.X) < OrthogonalRouter.AxisTolerance;
+            Assert.True(horiz || vert,
+                $"Segment {k} ({p1.X:F1},{p1.Y:F1})→({p2.X:F1},{p2.Y:F1}) not axis-aligned");
+        }
+
+        // Нет петли: нет горизонтальных сегментов вправо
+        for (var k = 0; k < arcs[0].Points.Count - 1; k++)
+        {
+            var dx = arcs[0].Points[k + 1].X - arcs[0].Points[k].X;
+            if (Math.Abs(dx) > OrthogonalRouter.AxisTolerance)
+            {
+                Assert.True(dx < 0,
+                    $"Segment {k} goes right ({dx:F1}) — creates a loop!");
+            }
+        }
+
+        // Промежуточные точки вне rect A
+        var rectA = new RectF(a.Position.X - a.Width / 2, a.Position.Y - a.Height / 2, a.Width, a.Height);
+        for (var k = 1; k < arcs[0].Points.Count - 1; k++)
+        {
+            Assert.False(rectA.Contains(arcs[0].Points[k]),
+                $"Point {k} inside A rect");
+        }
+    }
+
+    // =====================================================================
+    // Тест: три ноды горизонтально, дуга B→C.
+    // C смещена влево и вниз — дуга B→C заезжает на B.
+    // =====================================================================
+
+    [Fact]
+    public void ThreeNodesHorizontally_BC_DetourProducesAxisAlignedRoute()
+    {
+        var nodes = new List<PhysicsNode>
+        {
+            new("A", 0, 0) { Width = 160, Height = 80 },
+            new("B", 300, 0) { Width = 160, Height = 80 },
+            new("C", 600, 0) { Width = 160, Height = 80 },
+        };
+
+        var portB = new Port("B_right", nodes[1], nodes[1].Width / 2, 0);  // (380, 0)
+        var portC = new Port("C_left", nodes[2], -nodes[2].Width / 2, 0);  // (520, 0)
+        var edge = new Edge(portB, portC);
+
+        // Начальный маршрут: прямая (380,0)→(520,0)
+        var route = OrthogonalRouter.ComputeRoute(
+            portB.GetWorldPosition(), portC.GetWorldPosition(),
+            1, 2, nodes);
+
+        // Сдвигаем C влево и вниз — порт C оказывается левее B
+        // B rect: (220,-40,160,80) → X: 220..380, Y: -40..40
+        // C.X=150 → portC.X = 150-80 = 70 (левее B, но маршрут проходит через B)
+        nodes[2].Position = new Vector2(150, 100);
+
+        route = OrthogonalRouter.ComputeRoute(
+            portB.GetWorldPosition(), portC.GetWorldPosition(),
+            1, 2, nodes);
+
+        // Все сегменты ортогональны
+        for (var k = 0; k < route.Count - 1; k++)
+        {
+            var horiz = Math.Abs(route[k].Y - route[k + 1].Y) < OrthogonalRouter.AxisTolerance;
+            var vert = Math.Abs(route[k].X - route[k + 1].X) < OrthogonalRouter.AxisTolerance;
+            Assert.True(horiz || vert,
+                $"Segment {k} ({route[k].X:F1},{route[k].Y:F1})→({route[k + 1].X:F1},{route[k + 1].Y:F1}) not axis-aligned");
+        }
+
+        // Ни один сегмент не пересекает B
+        var rectB = new RectF(nodes[1].Position.X - nodes[1].Width / 2,
+            nodes[1].Position.Y - nodes[1].Height / 2,
+            nodes[1].Width, nodes[1].Height);
+        for (var k = 0; k < route.Count - 1; k++)
+        {
+            Assert.False(
+                SegmentPassesThroughRect(route[k], route[k + 1], rectB),
+                $"Segment {k} passes through B");
+        }
+
+        // Первая точка = порт B, последняя = порт C
+        Assert.Equal(portB.GetWorldPosition().X, route[0].X, 1);
+        Assert.Equal(portC.GetWorldPosition().X, route[^1].X, 1);
+    }
+
+    // =====================================================================
+    // Тест: A справа, B слева и ниже — детур без петли.
+    // На основе пойманного(DEBUG) состояния когда сегмент (560,351)→(745,350)
+    // был диагональным.
+    // =====================================================================
+
+    [Fact]
+    public void RightPort_TargetBelowLeft_NoDiagonalSegments()
+    {
+        var a = new PhysicsNode("A", 500, 350) { Width = 160, Height = 80 };
+        var b = new PhysicsNode("B", 200, 500) { Width = 160, Height = 80 };
+
+        var portA = new Port("A_right", a, a.Width / 2, 0);  // (580, 350)
+        var portB = new Port("B_left", b, -b.Width / 2, 0);  // (120, 500)
+        var edge = new Edge(portA, portB);
+
+        var nodes = new List<PhysicsNode> { a, b };
+
+        var route = OrthogonalRouter.ComputeRoute(
+            portA.GetWorldPosition(), portB.GetWorldPosition(),
+            0, 1, nodes);
+
+        // Все сегменты строго ортогональны
+        for (var k = 0; k < route.Count - 1; k++)
+        {
+            var horiz = Math.Abs(route[k].Y - route[k + 1].Y) < OrthogonalRouter.AxisTolerance;
+            var vert = Math.Abs(route[k].X - route[k + 1].X) < OrthogonalRouter.AxisTolerance;
+            Assert.True(horiz || vert,
+                $"Segment {k} ({route[k].X:F1},{route[k].Y:F1})→({route[k + 1].X:F1},{route[k + 1].Y:F1}) not axis-aligned");
+        }
+
+        // Нет петли: горизонтальные сегменты идут влево к цели
+        for (var k = 0; k < route.Count - 1; k++)
+        {
+            var dx = route[k + 1].X - route[k].X;
+            if (Math.Abs(dx) > OrthogonalRouter.AxisTolerance)
+            {
+                Assert.True(dx < 0,
+                    $"Segment {k} goes right ({dx:F1}) — loop!");
+            }
+        }
+
+        // Промежуточные точки вне A
+        var rectA = new RectF(a.Position.X - a.Width / 2, a.Position.Y - a.Height / 2, a.Width, a.Height);
+        for (var k = 1; k < route.Count - 1; k++)
+        {
+            Assert.False(rectA.Contains(route[k]),
+                $"Point {k} inside A rect");
+        }
+    }
 }

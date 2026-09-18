@@ -18,6 +18,9 @@ public sealed class ModelView : Control
     private DateTime _lastTickAt;
     private bool _firstSize = true;
 
+    // Кэш позиций портов для определения необходимости пересчёта дуг
+    private readonly List<Vector2> _lastPortPositions = new();
+
     private const float SimSpeed = 60f;
     private const float MaxSubstepDt = 1f / 60f;
     private const int MaxSubstepsPerTick = 240;
@@ -102,13 +105,39 @@ public sealed class ModelView : Control
     }
 
     /// <summary>
-    /// Пересчитывает все ортогональные дуги заново на основе текущих позиций нод.
+    /// Пересчитывает все ортогональные дуги, только если позиции портов изменились.
     /// </summary>
     private void RecomputeArcs()
     {
-        Model.Arcs.Clear();
         if (!UseOrthogonalEdges) return;
 
+        // Собираем текущие позиции всех портов
+        var currentPositions = new List<Vector2>(Model.Edges.Count * 2);
+        foreach (var edge in Model.Edges)
+        {
+            currentPositions.Add(edge.From.GetWorldPosition());
+            currentPositions.Add(edge.To.GetWorldPosition());
+        }
+
+        // Сравниваем с кэшем — если не изменились, не пересчитываем
+        if (_lastPortPositions.Count == currentPositions.Count)
+        {
+            var changed = false;
+            for (var i = 0; i < currentPositions.Count; i++)
+            {
+                if (Vector2.Distance(_lastPortPositions[i], currentPositions[i]) > 0.5f)
+                {
+                    changed = true;
+                    break;
+                }
+            }
+            if (!changed) return;
+        }
+
+        _lastPortPositions.Clear();
+        _lastPortPositions.AddRange(currentPositions);
+
+        Model.Arcs.Clear();
         foreach (var edge in Model.Edges)
         {
             var fromIdx = Model.Nodes.IndexOf(edge.From.Node);

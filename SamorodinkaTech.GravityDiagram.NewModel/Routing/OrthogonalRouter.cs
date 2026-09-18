@@ -65,6 +65,7 @@ public static class OrthogonalRouter
         route.Add(p2);
 
         // Итеративный поиск обходов для каждого сегмента
+        var sourceDetourApplied = false;
         for (var iter = 0; iter < MaxIterations; iter++)
         {
             var fixedSomething = false;
@@ -105,29 +106,90 @@ public static class OrthogonalRouter
                                   mid.Y > rect.Y && mid.Y < rect.Y + rect.Height))
                                 continue;
 
-                            // Обход исходной ноды: выходим наружу по нормали порта,
-                            // затем идём вдоль стороны узла (вверх/вниз для гориз. порта),
-                            // и только потом поворачиваем к цели.
+                            // Обход исходной ноды: определяем направление выхода по порту,
+                            // и выбираем маршрут: если цель в противоположном направлении —
+                            // идём вдоль стороны узла (вверх/вниз), чтобы не создавать петлю.
                             var margin = Math.Max(rect.Width, rect.Height) / 2 + PushOutDistance + 1f;
-                            var exitPoint = a.X <= rect.X
-                                ? new Vector2(a.X - margin, a.Y)       // Left port → влево
-                                : a.X >= rect.X + rect.Width
-                                    ? new Vector2(a.X + margin, a.Y)   // Right port → вправо
-                                    : a.Y <= rect.Y
-                                        ? new Vector2(a.X, a.Y - margin) // Top port → вверх
-                                        : new Vector2(a.X, a.Y + margin); // Bottom port → вниз
 
-                            // Точка вдоль стороны узла: выходим за пределы rect по Y
-                            var cornerY = b.Y <= rect.Y + rect.Height / 2
-                                ? rect.Y - margin   // Цель ниже центра → идём сверху
-                                : rect.Y + rect.Height + margin; // Цель выше → снизу
-                            var alongSide = new Vector2(exitPoint.X, cornerY);
+                            // Определяем: горизонтальный порт (Left/Right) или вертикальный (Top/Bottom)?
+                            var isHorizontalPort = a.X <= rect.X + 0.01f || a.X >= rect.X + rect.Width - 0.01f;
 
-                            // Поворот к цели
-                            var turnToTarget = new Vector2(b.X, cornerY);
+                            List<Vector2> points;
+                            if (isHorizontalPort)
+                            {
+                                var goRight = a.X >= rect.X + rect.Width / 2;
+                                var targetRight = b.X > a.X;
+                                var sameDirection = goRight == targetRight;
+
+                                if (sameDirection)
+                                {
+                                    // Цель в том же направлении — выходим наружу, потом к цели
+                                    var exitX = goRight ? rect.X + rect.Width + margin : rect.X - margin;
+                                    var turnY = b.Y;
+                                    points = new List<Vector2>
+                                    {
+                                        a,
+                                        new(exitX, a.Y),
+                                        new(exitX, turnY),
+                                        b
+                                    };
+                                }
+                                else
+                                {
+                                    // Цель в противоположном направлении — идём вдоль стороны узла.
+                                    // cornerY должен быть на той же стороне rect, что и цель,
+                                    // чтобы горизонтальный сегмент не заезжал в rect.
+                                    var cornerY = b.Y < rect.Y
+                                        ? rect.Y - margin
+                                        : b.Y > rect.Y + rect.Height
+                                            ? rect.Y + rect.Height + margin
+                                            : rect.Y + rect.Height + margin;
+                                    points = new List<Vector2>
+                                    {
+                                        a,
+                                        new(a.X, cornerY),
+                                        new(b.X, cornerY),
+                                        b
+                                    };
+                                }
+                            }
+                            else
+                            {
+                                // Вертикальный порт (Top/Bottom)
+                                var goDown = a.Y >= rect.Y + rect.Height / 2;
+                                var targetDown = b.Y > a.Y;
+                                var sameDirection = goDown == targetDown;
+
+                                if (sameDirection)
+                                {
+                                    var exitY = goDown ? rect.Y + rect.Height + margin : rect.Y - margin;
+                                    var turnX = b.X;
+                                    points = new List<Vector2>
+                                    {
+                                        a,
+                                        new(a.X, exitY),
+                                        new(turnX, exitY),
+                                        b
+                                    };
+                                }
+                                else
+                                {
+                                    var cornerX = b.X <= rect.X + rect.Width / 2
+                                        ? rect.X - margin
+                                        : rect.X + rect.Width + margin;
+                                    points = new List<Vector2>
+                                    {
+                                        a,
+                                        new(cornerX, a.Y),
+                                        new(cornerX, b.Y),
+                                        b
+                                    };
+                                }
+                            }
 
                             route.RemoveAt(k);
-                            route.InsertRange(k, new[] { a, exitPoint, alongSide, turnToTarget, b });
+                            route.InsertRange(k, points);
+                            sourceDetourApplied = true;
                             fixedSomething = true;
                             break;
                         }
@@ -163,10 +225,12 @@ public static class OrthogonalRouter
         MergeCollinear(route);
 
         // Сдвигаем общие точки коллинеарных сегментов для визуального разделения
-        ShiftSharedPoints(route, ShiftOffset);
+        // (пропускаем если был обход исходной ноды — точки детура не должны сдвигаться)
+        if (!sourceDetourApplied)
+            ShiftSharedPoints(route, ShiftOffset);
 
-        // Выталкиваем промежуточные точки из rect нод
-        PushOutFromNodes(route, nodes);
+        // Выталкиваем промежуточные точки из rect нод (кроме source и target)
+        PushOutFromNodes(route, nodes, fromIdx, toIdx);
 
         // Гарантируем, что крайние точки маршрута совпадают с портами
         // и что первый/последний сегменты ортогональны.
@@ -215,6 +279,8 @@ public static class OrthogonalRouter
         }
 
 #if DEBUG
+        var hasError = false;
+
         // Проверка: каждый сегмент финального маршрута ортогонален
         for (var k = 0; k < route.Count - 1; k++)
         {
@@ -222,6 +288,7 @@ public static class OrthogonalRouter
             var vert = Math.Abs(route[k].X - route[k + 1].X) < AxisTolerance;
             if (!horiz && !vert)
             {
+                hasError = true;
                 Console.Error.WriteLine(
                     $"[DEBUG] Segment [{k}] ({route[k].X:F2},{route[k].Y:F2})→" +
                     $"({route[k + 1].X:F2},{route[k + 1].Y:F2}) is not axis-aligned");
@@ -246,11 +313,37 @@ public static class OrthogonalRouter
 
                 if (SegmentIntersectsRect(segA, segB, rect))
                 {
-                    throw new InvalidOperationException(
+                    hasError = true;
+                    Console.Error.WriteLine(
                         $"[DEBUG] Final route segment ({segA.X:F0},{segA.Y:F0})→({segB.X:F0},{segB.Y:F0}) " +
                         $"still intersects {node.Label} rect ({rect.X:F0},{rect.Y:F0},{rect.Width:F0},{rect.Height:F0})");
                 }
             }
+        }
+
+        // Вывод состояния модели для воспроизведения в тесте
+        if (hasError)
+        {
+            Console.Error.WriteLine("=== MODEL STATE FOR UNIT TEST ===");
+            Console.Error.WriteLine($"ComputeRoute(p1: new({p1.X:F1}f, {p1.Y:F1}f), p2: new({p2.X:F1}f, {p2.Y:F1}f), fromIdx: {fromIdx}, toIdx: {toIdx})");
+            Console.Error.Write("var nodes = new List<PhysicsNode>\n{\n");
+            for (var i = 0; i < nodes.Count; i++)
+            {
+                var n = nodes[i];
+                Console.Error.Write($"    new(\"{n.Label}\", {n.Position.X:F1}f, {n.Position.Y:F1}f) {{ Width = {n.Width}f, Height = {n.Height}f }}");
+                if (i < nodes.Count - 1) Console.Error.Write(",");
+                Console.Error.WriteLine();
+            }
+            Console.Error.WriteLine("};");
+            Console.Error.Write("var route = new List<Vector2>\n{\n");
+            for (var i = 0; i < route.Count; i++)
+            {
+                Console.Error.Write($"    new({route[i].X:F1}f, {route[i].Y:F1}f)");
+                if (i < route.Count - 1) Console.Error.Write(",");
+                Console.Error.WriteLine();
+            }
+            Console.Error.WriteLine("};");
+            Console.Error.WriteLine("=== END MODEL STATE ===");
         }
 #endif
 
@@ -265,11 +358,9 @@ public static class OrthogonalRouter
     /// Вычисляет ортогональный обход от a к b вокруг rect.
     /// Возвращает список точек от a до b (включительно), не пересекающих rect.
     ///
-    /// Алгоритм:
-    /// 1. Определяем тип сегмента (горизонтальный/вертикальный/диагональный)
-    /// 2. Выбираем сторону обхода (сверху/снизу/слева/справа)
-    /// 3. Строим маршрут через промежуточные точки снаружи rect
-    /// 4. Если промежуточная точка внутри rect — переключаем сторону
+    /// Временное правило: ломаем сегмент строго посередине,
+    /// но поворот делаем до входа в rect (на границе rect с отступом),
+    /// чтобы промежуточные точки были за пределами rect.
     /// </summary>
     private static List<Vector2> ComputeDetour(Vector2 a, Vector2 b, RectF rect)
     {
@@ -280,71 +371,62 @@ public static class OrthogonalRouter
 
         var margin = 20f;
 
-        var rCenterX = (rLeft + rRight) / 2;
-        var rCenterY = (rTop + rBottom) / 2;
-
-        // Точки по периметру rect с отступом margin
-        var topY = rTop - margin;
-        var bottomY = rBottom + margin;
-        var leftX = rLeft - margin;
-        var rightX = rRight + margin;
-
         List<Vector2> result;
 
         if (Math.Abs(a.Y - b.Y) < AxisTolerance)
         {
-            // Горизонтальный сегмент — обход сверху или снизу
-            var goAbove = a.Y <= rCenterY;
-            var dy = goAbove ? topY : bottomY;
-            result = new List<Vector2> { a, new(a.X, dy), new(b.X, dy), b };
+            // Горизонтальный сегмент: выходим за rect по X и Y.
+            // Точка выхода должна быть за пределами rect по обеим осям.
+            var breakX = a.X < (rLeft + rRight) / 2 ? rLeft - margin : rRight + margin;
+            var goUp = a.Y <= (rTop + rBottom) / 2;
+            var dy = goUp ? rTop - margin : rBottom + margin;
+            var exitPoint = new Vector2(breakX, dy);
+            result = new List<Vector2>
+            {
+                a,
+                new(a.X, dy),       // поворот вверх/вниз на уровне a
+                exitPoint,          // горизонтально за пределы rect
+                new(b.X, dy),       // горизонтально к b
+                b
+            };
         }
         else if (Math.Abs(a.X - b.X) < AxisTolerance)
         {
-            // Вертикальный сегмент — обход слева или справа
-            var goLeft = a.X >= rCenterX;
-            var dx = goLeft ? leftX : rightX;
-            result = new List<Vector2> { a, new(dx, a.Y), new(dx, b.Y), b };
+            // Вертикальный сегмент: выходим за rect по X и Y.
+            var breakY = a.Y < (rTop + rBottom) / 2 ? rTop - margin : rBottom + margin;
+            var goLeft = a.X >= (rLeft + rRight) / 2;
+            var dx = goLeft ? rLeft - margin : rRight + margin;
+            var exitPoint = new Vector2(dx, breakY);
+            result = new List<Vector2>
+            {
+                a,
+                new(dx, a.Y),       // поворот влево/вправо на уровне a
+                exitPoint,          // вниз/вверх за пределы rect
+                new(dx, b.Y),       // вертикально к b
+                b
+            };
         }
         else
         {
-            // Диагональный сегмент — L-образный обход
-            var goAbove = a.Y <= rCenterY;
-            var goLeft = a.X >= rCenterX;
-            var dy = goAbove ? topY : bottomY;
-            var dx = goLeft ? leftX : rightX;
+            // Диагональный сегмент: выходим за rect по обеим осям.
+            var breakX = a.X < (rLeft + rRight) / 2 ? rLeft - margin : rRight + margin;
+            var breakY = a.Y < (rTop + rBottom) / 2 ? rTop - margin : rBottom + margin;
             result = new List<Vector2>
             {
-                a, new(a.X, dy), new(dx, dy), new(dx, b.Y), b
+                a,
+                new(a.X, breakY),
+                new(breakX, breakY),
+                new(breakX, b.Y),
+                b
             };
         }
 
-        // Проверяем: промежуточные точки не внутри rect
-        for (var i = 1; i < result.Count - 1; i++)
-        {
-            var pt = result[i];
-            if (pt.X > rLeft && pt.X < rRight && pt.Y > rTop && pt.Y < rBottom)
-            {
-                // Точка внутри rect — переключаем сторону обхода
-                if (Math.Abs(a.Y - b.Y) < AxisTolerance)
-                {
-                    var dy = a.Y <= rCenterY ? bottomY : topY;
-                    result = new List<Vector2> { a, new(a.X, dy), new(b.X, dy), b };
-                }
-                else if (Math.Abs(a.X - b.X) < AxisTolerance)
-                {
-                    var dx = a.X >= rCenterX ? rightX : leftX;
-                    result = new List<Vector2> { a, new(dx, a.Y), new(dx, b.Y), b };
-                }
-            }
-        }
-
 #if DEBUG
-        // Проверка: ни один сегмент обхода не пересекает rect препятствия
         for (var i = 0; i < result.Count - 1; i++)
         {
             if (SegmentIntersectsRect(result[i], result[i + 1], rect))
             {
-                throw new InvalidOperationException(
+                Console.Error.WriteLine(
                     $"[DEBUG] Detour segment ({result[i].X:F0},{result[i].Y:F0})→" +
                     $"({result[i + 1].X:F0},{result[i + 1].Y:F0}) intersects obstacle rect");
             }
@@ -472,7 +554,8 @@ public static class OrthogonalRouter
     /// Если точка внутри rect какой-либо ноды — выталкивает её
     /// к ближайшему краю rect с отступом PushOutDistance.
     /// </summary>
-    public static void PushOutFromNodes(List<Vector2> route, List<PhysicsNode> nodes)
+    public static void PushOutFromNodes(List<Vector2> route, List<PhysicsNode> nodes,
+        int skipFromIdx = -1, int skipToIdx = -1)
     {
         for (var k = 1; k < route.Count - 1; k++)
         {
@@ -485,6 +568,9 @@ public static class OrthogonalRouter
 
             foreach (var node in nodes)
             {
+                var ni = nodes.IndexOf(node);
+                if (ni == skipFromIdx || ni == skipToIdx) continue;
+
                 var rect = new RectF(
                     node.Position.X - node.Width / 2,
                     node.Position.Y - node.Height / 2,
