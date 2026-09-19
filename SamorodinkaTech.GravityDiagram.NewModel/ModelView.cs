@@ -113,25 +113,7 @@ public sealed class ModelView : Control
         _timer.Start();
     }
 
-    /// <summary>
-    /// Пересчитывает все ортогональные дуги.
-    /// </summary>
-    private void RecomputeArcs()
-    {
-        if (!UseOrthogonalEdges) return;
-
-        Model.Arcs.Clear();
-        foreach (var edge in Model.Edges)
-        {
-            var fromIdx = Model.Nodes.IndexOf(edge.From.Node);
-            var toIdx = Model.Nodes.IndexOf(edge.To.Node);
-            var p1 = edge.From.GetWorldPosition();
-            var p2 = edge.To.GetWorldPosition();
-            var route = OrthogonalRouter.ComputeRoute(
-                p1, p2, fromIdx, toIdx, Model.Nodes);
-            Model.Arcs.Add(new Arc(edge) { Points = route });
-        }
-    }
+    // RecomputeArcs removed — switched to strictly incremental AdjustArcs()
 
     /// Удаляет один сегмент нулевой длины. Возвращает true если удалил.
     private static bool RemoveOneZeroSegment(List<Vector2> points)
@@ -160,39 +142,226 @@ public sealed class ModelView : Control
     /// Корректирует зафиксированные дуги после перемещения нод.
     /// За один вызов — одно преобразование.
     /// </summary>
-    public void AdjustArcs()
+public void AdjustArcs()
     {
+        const float Eps = 0.01f;
+        const float PushOut = 6f; // minimal nudge outside node rect
+
+        bool NearlyEqual(float a, float b, float eps = 0.1f) => MathF.Abs(a - b) <= eps;
+        bool IsAxisAligned(in Vector2 a, in Vector2 b, float eps = 0.1f)
+            => NearlyEqual(a.X, b.X, eps) || NearlyEqual(a.Y, b.Y, eps);
+
+        bool SegmentIntersectsRect(in Vector2 a, in Vector2 b, in Rect rect)
+        {
+            // Horizontal segment
+            if (NearlyEqual(a.Y, b.Y))
+            {
+                var y = a.Y;
+                var minX = MathF.Min(a.X, b.X);
+                var maxX = MathF.Max(a.X, b.X);
+                var rLeft = (float)rect.X;
+                var rRight = (float)(rect.X + rect.Width);
+                var rTop = (float)rect.Y;
+                var rBottom = (float)(rect.Y + rect.Height);
+                if (y > rTop && y < rBottom)
+                {
+                    var overlapL = MathF.Max(minX, rLeft);
+                    var overlapR = MathF.Min(maxX, rRight);
+                    return overlapR > overlapL; // interior overlap
+                }
+                return false;
+            }
+            // Vertical segment
+            if (NearlyEqual(a.X, b.X))
+            {
+                var x = a.X;
+                var minY = MathF.Min(a.Y, b.Y);
+                var maxY = MathF.Max(a.Y, b.Y);
+                var rLeft = (float)rect.X;
+                var rRight = (float)(rect.X + rect.Width);
+                var rTop = (float)rect.Y;
+                var rBottom = (float)(rect.Y + rect.Height);
+                if (x > rLeft && x < rRight)
+                {
+                    var overlapT = MathF.Max(minY, rTop);
+                    var overlapB = MathF.Min(maxY, rBottom);
+                    return overlapB > overlapT;
+                }
+                return false;
+            }
+            // Diagonal segments are handled by orthogonality restoration before intersection checks
+            return false;
+        }
+
+        Vector2 NudgeOutsideY(float x, float y, in Rect rect)
+        {
+            var rTop = (float)rect.Y;
+            var rBottom = (float)(rect.Y + rect.Height);
+            var dyTop = MathF.Abs(y - rTop);
+            var dyBottom = MathF.Abs(y - rBottom);
+            return dyTop <= dyBottom ? new Vector2(x, rTop - PushOut) : new Vector2(x, rBottom + PushOut);
+        }
+        Vector2 NudgeOutsideX(float x, float y, in Rect rect)
+        {
+            var rLeft = (float)rect.X;
+            var rRight = (float)(rect.X + rect.Width);
+            var dxLeft = MathF.Abs(x - rLeft);
+            var dxRight = MathF.Abs(x - rRight);
+            return dxLeft <= dxRight ? new Vector2(rLeft - PushOut, y) : new Vector2(rRight + PushOut, y);
+        }
+
+        bool TryInsertOrthogonalCorner(List<Vector2> points, int segIndex)
+        {
+            // Insert a single corner for diagonal pair A->B.
+            if (segIndex < 0 || segIndex >= points.Count - 1) return false;
+            var a = points[segIndex];
+            var b = points[segIndex + 1];
+            if (IsAxisAligned(a, b)) return false;
+            var cand1 = new Vector2(b.X, a.Y);
+            var cand2 = new Vector2(a.X, b.Y);
+            var d1 = Vector2.Distance(a, cand1) + Vector2.Distance(cand1, b);
+            var d2 = Vector2.Distance(a, cand2) + Vector2.Distance(cand2, b);
+            var corner = d1 <= d2 ? cand1 : cand2;
+            points.Insert(segIndex + 1, corner);
+            return true;
+        }
+
+        bool RemoveOneCollinearMiddle(List<Vector2> points)
+        {
+            for (var k = 1; k < points.Count - 1; k++)
+            {
+                var a = points[k - 1];
+                var b = points[k];
+                var c = points[k + 1];
+                var sameX = NearlyEqual(a.X, b.X) && NearlyEqual(b.X, c.X);
+                var sameY = NearlyEqual(a.Y, b.Y) && NearlyEqual(b.Y, c.Y);
+                if (sameX || sameY)
+                {
+                    points.RemoveAt(k);
+                    return true;
+                }
+            }
+            return false;
+        }
+
         for (var i = 0; i < Model.Arcs.Count; i++)
         {
             var arc = Model.Arcs[i];
             var edge = Model.Edges[i];
             var points = arc.Points;
             if (points.Count < 2) continue;
+            // Remove one zero-length segment upfront; do only that this pass
+            if (RemoveOneZeroSegment(points))
+                continue;
 
-            // Удаляем сегменты нулевой длины (по одному)
-            while (RemoveOneZeroSegment(points)) { }
+            var fromPos = edge.From.GetWorldPosition();
+            var toPos = edge.To.GetWorldPosition();
 
-            if (points.Count < 2) continue;
+            // 1) Endpoint adherence (end segments and neighbors only)
+            // Source end pin
+            if (Vector2.DistanceSquared(points[0], fromPos) > Eps * Eps)
+            {
+                points[0] = fromPos;
+                if (points.Count >= 2)
+                {
+                    var p1 = points[1];
+                    if (!IsAxisAligned(points[0], p1))
+                    {
+                        // Adjust p1 to align either X or Y with p0 (pick smaller move)
+                        var opt1 = new Vector2(p1.X, points[0].Y);
+                        var opt2 = new Vector2(points[0].X, p1.Y);
+                        points[1] = Vector2.Distance(p1, opt1) <= Vector2.Distance(p1, opt2) ? opt1 : opt2;
+                    }
+                }
+                // no early continue: we also update target in the same pass
+            }
+            // Target end pin
+            if (Vector2.DistanceSquared(points[^1], toPos) > Eps * Eps)
+            {
+                points[^1] = toPos;
+                if (points.Count >= 2)
+                {
+                    var p2 = points[^2];
+                    if (!IsAxisAligned(p2, points[^1]))
+                    {
+                        var opt1 = new Vector2(p2.X, points[^1].Y);
+                        var opt2 = new Vector2(points[^1].X, p2.Y);
+                        points[^2] = Vector2.Distance(p2, opt1) <= Vector2.Distance(p2, opt2) ? opt1 : opt2;
+                    }
+                }
+                // no early continue: allow orthogonality fix / push-out in the same pass
+            }
 
-            // Восстанавливаем L-точку если потеряна
-            if (points.Count == 2 && Math.Abs(points[0].Y - points[1].Y) > OrthogonalRouter.AxisTolerance)
-                points.Insert(1, new Vector2(points[1].X, points[0].Y));
+            // Remove zero-length again if created by endpoint snaps — stop after this arc if removed
+            if (RemoveOneZeroSegment(points))
+                continue;
+            // 2) Restore orthogonality (insert one corner for first diagonal segment)
+            for (var k = 0; k < points.Count - 1; k++)
+            {
+                if (!IsAxisAligned(points[k], points[k + 1]))
+                {
+                    if (TryInsertOrthogonalCorner(points, k))
+                        goto NextArc; // one transform per arc
+                }
+            }
 
-            if (points.Count < 3) continue;
+            // 3) Push-out against node rectangles (insert one pivot)
+            for (var k = 0; k < points.Count - 1; k++)
+            {
+                var a = points[k];
+                var b = points[k + 1];
+                if (!IsAxisAligned(a, b))
+                    continue;
 
-            // Сдвигаем все точки на sourceDelta
-            var portPos = edge.From.GetWorldPosition();
-            var sourceDelta = portPos - points[0];
-            ShiftAllPoints(points, sourceDelta);
+                // Check against all nodes except the two endpoint nodes
+                foreach (var node in Model.Nodes)
+                {
+                    if (node == edge.From.Node || node == edge.To.Node)
+                        continue;
 
-            // Корректируем последнюю точку на targetDelta
-            var toPortPos = edge.To.GetWorldPosition();
-            var targetDelta = toPortPos - points[^1];
-            if (targetDelta.LengthSquared() > 0.0001f)
-                points[^1] = toPortPos;
+                    var rect = new Rect(
+                        node.Position.X - node.Width / 2,
+                        node.Position.Y - node.Height / 2,
+                        node.Width,
+                        node.Height);
 
-            // Удаляем сегменты нулевой длины (по одному)
-            while (RemoveOneZeroSegment(points)) { }
+                    if (!SegmentIntersectsRect(a, b, rect))
+                        continue;
+
+                    // Insert a single pivot aligned with one endpoint to keep orthogonality.
+                    // For horizontal segment, move vertically at x=a.X or x=b.X (pick a.X).
+                    // For vertical segment, move horizontally at y=a.Y (pick y of a).
+                    Vector2 pivot;
+                    if (NearlyEqual(a.Y, b.Y))
+                    {
+                        var n = NudgeOutsideY(a.X, a.Y, rect);
+                        // Guard against zero-length insertion
+                        if (!NearlyEqual(n.X, a.X) || !NearlyEqual(n.Y, a.Y))
+                            pivot = n;
+                        else
+                            continue;
+                    }
+                    else
+                    {
+                        var n = NudgeOutsideX(a.X, a.Y, rect);
+                        if (!NearlyEqual(n.X, a.X) || !NearlyEqual(n.Y, a.Y))
+                            pivot = n;
+                        else
+                            continue;
+                    }
+
+                    points.Insert(k + 1, pivot);
+                    goto NextArc; // one transform per arc
+                }
+            }
+
+            // 4) Degeneracy cleanup (only if nothing else applied)
+            if (RemoveOneZeroSegment(points))
+                continue;
+            if (RemoveOneCollinearMiddle(points))
+                continue;
+
+        NextArc: ;
         }
     }
 
@@ -240,8 +409,8 @@ public sealed class ModelView : Control
             for (var i = 0; i < steps; i++)
                 Model.Step(subDt);
 
-            // Пересчитываем дуги (с кэшированием — при значительном движении нод)
-            RecomputeArcs();
+            // Инкрементально корректируем дуги (без полного пересчёта)
+            AdjustArcs();
 
             InvalidateVisual();
         }
@@ -265,16 +434,24 @@ public sealed class ModelView : Control
             // Ортогональные дуги из зафиксированных маршрутов
             foreach (var arc in Model.Arcs)
             {
-                try
-                {
-                    if (arc.Points.Count < 2) continue;
+                if (arc.Points.Count < 2) continue;
 
-                    for (var k = 0; k < arc.Points.Count - 1; k++)
-                        context.DrawLine(EdgePen, ToPoint(arc.Points[k]), ToPoint(arc.Points[k + 1]));
-                }
-                catch (Exception ex)
+                for (var k = 0; k < arc.Points.Count - 1; k++)
                 {
-                    Console.Error.WriteLine($"[Render] Arc: {ex.Message}");
+                    var a = arc.Points[k];
+                    var b = arc.Points[k + 1];
+                    bool finite = !(float.IsNaN(a.X) || float.IsNaN(a.Y) || float.IsInfinity(a.X) || float.IsInfinity(a.Y)
+                                   || float.IsNaN(b.X) || float.IsNaN(b.Y) || float.IsInfinity(b.X) || float.IsInfinity(b.Y));
+                    if (!finite) continue;
+                    try
+                    {
+                        context.DrawLine(EdgePen, ToPoint(a), ToPoint(b));
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[Render] Arc seg {k}: {ex.Message}");
+                        // Skip only this segment, continue drawing rest
+                    }
                 }
             }
         }

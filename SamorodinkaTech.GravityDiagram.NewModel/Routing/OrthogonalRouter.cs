@@ -20,7 +20,7 @@ namespace SamorodinkaTech.GravityDiagram.NewModel;
 /// 6. Сдвигает общие точки коллинеарных сегментов для визуального разделения
 /// 7. Выталкивает промежуточные точки из rect нод
 /// </summary>
-public static class OrthogonalRouter
+public static partial class OrthogonalRouter
 {
     /// <summary>Сдвиг общей точки коллинеарных сегментов (пиксели).</summary>
     public const float ShiftOffset = 20f;
@@ -282,10 +282,48 @@ public static class OrthogonalRouter
                 (float)Math.Round(route[k].Y));
         }
 
+        // Дополнительная гарантия ортогональности для всех соседних пар:
+        EnsureOrthogonalRoute(route, nodes, fromIdx, toIdx);
+
         // Гарантируем L-точку (拐角): если p1.Y != p2.Y, но L-точка потеряна — восстанавливаем
         if (route.Count == 2 && Math.Abs(route[0].Y - route[1].Y) > AxisTolerance)
         {
             route.Insert(1, new Vector2(route[1].X, route[0].Y));
+        }
+
+        // Финальная подправка последнего сегмента: строго ортогонален к p2
+        if (route.Count >= 2)
+        {
+            var a = route[^2];
+            var b = route[^1]; // == p2
+            var horiz = Math.Abs(a.Y - b.Y) < AxisTolerance;
+            var vert = Math.Abs(a.X - b.X) < AxisTolerance;
+            if (!horiz && !vert)
+            {
+                // Повернуть предпоследнюю точку на один из вариантов, стараясь не войти в прямоугольники нод
+                var cand1 = new Vector2(a.X, b.Y);
+                var cand2 = new Vector2(b.X, a.Y);
+                bool Ok(Vector2 p)
+                {
+                    foreach (var node in nodes)
+                    {
+                        var ni = nodes.IndexOf(node);
+                        if (ni == fromIdx || ni == toIdx) continue;
+                        var rect = new RectF(
+                            node.Position.X - node.Width / 2,
+                            node.Position.Y - node.Height / 2,
+                            node.Width,
+                            node.Height);
+                        if (SegmentIntersectsRect(a, p, rect) || SegmentIntersectsRect(p, b, rect))
+                            return false;
+                    }
+                    return true;
+                }
+                var ok1 = Ok(cand1);
+                var ok2 = Ok(cand2);
+                Vector2 chosen = ok1 && !ok2 ? cand1 : !ok1 && ok2 ? cand2 : (Vector2.Distance(a, cand1) <= Vector2.Distance(a, cand2) ? cand1 : cand2);
+                route[^2] = chosen;
+            }
         }
 
         // Удаление коллинеарных точек — в самом последнем порядке (после snap-to-grid)
@@ -361,37 +399,44 @@ public static class OrthogonalRouter
 
         if (Math.Abs(a.Y - b.Y) < AxisTolerance)
         {
-            // Горизонтальный сегмент — ломаем посередине a→b
-            var midX = (a.X + b.X) / 2;
-            // Определяем направление обхода: вверх или вниз от rect
+            // Горизонтальный сегмент. Обход: сразу уходим по Y за пределы rect,
+            // затем идём горизонтально на X=b.X и возвращаемся к b.Y.
             var goUp = a.Y <= rect.Y + rect.Height / 2;
-            var dy = goUp ? rect.Y - margin : rect.Y + rect.Height + margin;
+            var turnY = goUp ? rect.Y - margin : rect.Y + rect.Height + margin;
 
             if (bInsideRect)
             {
-                // b внутри rect — ломаем посередине, обходим rect целиком
+                // Цель внутри rect — подходим сначала к безопасному X за пределами rect, затем к b
                 var approachX = b.X < rect.X + rect.Width / 2
                     ? rect.X - margin
                     : rect.X + rect.Width + margin;
                 result = new List<Vector2>
                 {
-                    a, new(midX, a.Y), new(midX, dy), new(approachX, dy), new(approachX, b.Y), b
+                    a,
+                    new(a.X, turnY),
+                    new(approachX, turnY),
+                    new(approachX, b.Y),
+                    b
                 };
             }
             else
             {
                 result = new List<Vector2>
                 {
-                    a, new(midX, a.Y), new(midX, dy), new(midX, b.Y), b
+                    a,
+                    new(a.X, turnY),
+                    new(b.X, turnY),
+                    new(b.X, b.Y),
+                    b
                 };
             }
         }
         else if (Math.Abs(a.X - b.X) < AxisTolerance)
         {
-            // Вертикальный сегмент — ломаем посередине a→b
-            var midY = (a.Y + b.Y) / 2;
+            // Вертикальный сегмент. Обход: сразу уходим по X за пределы rect,
+            // затем идём вертикально на Y=b.Y и возвращаемся к b.X.
             var goLeft = a.X >= rect.X + rect.Width / 2;
-            var dx = goLeft ? rect.X - margin : rect.X + rect.Width + margin;
+            var turnX = goLeft ? rect.X - margin : rect.X + rect.Width + margin;
 
             if (bInsideRect)
             {
@@ -400,14 +445,22 @@ public static class OrthogonalRouter
                     : rect.Y + rect.Height + margin;
                 result = new List<Vector2>
                 {
-                    a, new(a.X, midY), new(dx, midY), new(dx, approachY), new(b.X, approachY), b
+                    a,
+                    new(turnX, a.Y),
+                    new(turnX, approachY),
+                    new(b.X, approachY),
+                    b
                 };
             }
             else
             {
                 result = new List<Vector2>
                 {
-                    a, new(a.X, midY), new(dx, midY), new(b.X, midY), b
+                    a,
+                    new(turnX, a.Y),
+                    new(turnX, b.Y),
+                    new(b.X, b.Y),
+                    b
                 };
             }
         }
@@ -716,4 +769,68 @@ public static class OrthogonalRouter
     private static float Cross(Vector2 a, Vector2 b) => a.X * b.Y - a.Y * b.X;
 }
 
+// Вспомогательная ортогонализация полного маршрута: вставляет один поворот
+// для каждой диагональной пары соседних точек. Выбирает вариант (X-first или Y-first),
+// который не даёт пересечения сегментов с какими-либо прямоугольниками нод
+// (кроме исходной и целевой нод). Если оба варианта пересекают — выбирает
+// с минимальной добавленной длиной.
+partial class OrthogonalRouter
+{
+    private static void EnsureOrthogonalRoute(List<Vector2> route, List<PhysicsNode> nodes, int skipFromIdx, int skipToIdx)
+    {
+        if (route.Count < 2) return;
+        int i = 0;
+        while (i < route.Count - 1)
+        {
+            var a = route[i];
+            var b = route[i + 1];
+            var horiz = Math.Abs(a.Y - b.Y) < AxisTolerance;
+            var vert = Math.Abs(a.X - b.X) < AxisTolerance;
+            if (horiz || vert) { i++; continue; }
 
+            var cand1 = new Vector2(b.X, a.Y); // X-last (Y-first)
+            var cand2 = new Vector2(a.X, b.Y); // Y-last (X-first)
+
+            bool Ok(Vector2 p)
+            {
+                // Проверяем два сегмента: a→p и p→b
+                foreach (var node in nodes)
+                {
+                    var ni = nodes.IndexOf(node);
+                    if (ni == skipFromIdx || ni == skipToIdx) continue;
+                    var rect = new RectF(
+                        node.Position.X - node.Width / 2,
+                        node.Position.Y - node.Height / 2,
+                        node.Width,
+                        node.Height);
+                    if (SegmentIntersectsRect(a, p, rect) || SegmentIntersectsRect(p, b, rect))
+                        return false;
+                }
+                return true;
+            }
+
+            var ok1 = Ok(cand1);
+            var ok2 = Ok(cand2);
+
+            Vector2 corner;
+            if (ok1 && !ok2) corner = cand1;
+            else if (!ok1 && ok2) corner = cand2;
+            else if (ok1 && ok2)
+            {
+                var d1 = Vector2.Distance(a, cand1) + Vector2.Distance(cand1, b);
+                var d2 = Vector2.Distance(a, cand2) + Vector2.Distance(cand2, b);
+                corner = d1 <= d2 ? cand1 : cand2;
+            }
+            else
+            {
+                // оба невалидны — выберем с минимальной добавленной длиной
+                var d1 = Vector2.Distance(a, cand1) + Vector2.Distance(cand1, b);
+                var d2 = Vector2.Distance(a, cand2) + Vector2.Distance(cand2, b);
+                corner = d1 <= d2 ? cand1 : cand2;
+            }
+
+            route.Insert(i + 1, corner);
+            i += 2; // пропускаем только что исправленный участок
+        }
+    }
+}
